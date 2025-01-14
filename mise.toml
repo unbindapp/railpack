@@ -1,0 +1,11 @@
+[tasks.build]
+run = "go build -o bin/cli cmd/cli/main.go"
+
+[tasks.clean]
+run = "rm -rf bin"
+
+[tasks.test]
+run = "go test ./..."
+
+[tools.go]
+version = "1.23.4"
