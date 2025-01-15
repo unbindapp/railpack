@@ -11,12 +11,12 @@ type Environment struct {
 	Variables map[string]string
 }
 
-func NewEnvironment(variables map[string]string) *Environment {
+func NewEnvironment(variables *map[string]string) *Environment {
 	if variables == nil {
-		variables = make(map[string]string)
+		variables = &map[string]string{}
 	}
 
-	return &Environment{Variables: variables}
+	return &Environment{Variables: *variables}
 }
 
 // FromEnvs collects variables from the given environment variable names
