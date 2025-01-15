@@ -1,8 +1,10 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
 type Environment struct {
@@ -53,4 +55,26 @@ func (e *Environment) GetVariable(name string) string {
 // SetVariable stores a variable in the Environment
 func (e *Environment) SetVariable(name, value string) {
 	e.Variables[name] = value
+}
+
+// ConfigVariable returns the RAILPACK_ prefixed version of a variable name
+func (e *Environment) ConfigVariable(name string) string {
+	return fmt.Sprintf("RAILPACK_%s", name)
+}
+
+// GetConfigVariable returns the value of a RAILPACK_ prefixed variable with newlines removed
+func (e *Environment) GetConfigVariable(name string) string {
+	configVar := e.ConfigVariable(name)
+	if val, exists := e.Variables[configVar]; exists {
+		return strings.ReplaceAll(val, "\n", "")
+	}
+	return ""
+}
+
+// IsConfigVariableTruthy checks if a RAILPACK_ prefixed variable is set to "1" or "true"
+func (e *Environment) IsConfigVariableTruthy(name string) bool {
+	if val := e.GetConfigVariable(name); val != "" {
+		return val == "1" || val == "true"
+	}
+	return false
 }

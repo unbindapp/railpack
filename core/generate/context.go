@@ -8,8 +8,8 @@ import (
 )
 
 type GenerateContext struct {
-	app         *app.App
-	env         *app.Environment
+	App         *app.App
+	Env         *app.Environment
 	Resolver    *resolver.Resolver
 	Variables   map[string]string
 	AptPackages []string
@@ -23,8 +23,8 @@ func NewGenerateContext(app *app.App, env *app.Environment) (*GenerateContext, e
 	}
 
 	return &GenerateContext{
-		app:         app,
-		env:         env,
+		App:         app,
+		Env:         env,
 		Resolver:    resolver,
 		Variables:   map[string]string{},
 		AptPackages: []string{},

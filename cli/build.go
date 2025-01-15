@@ -42,12 +42,12 @@ var BuildCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		plan, err := core.GenerateBuildPlan(userApp, env, &core.GenerateBuildPlanOptions{})
+		buildResult, err := core.GenerateBuildPlan(userApp, env, &core.GenerateBuildPlanOptions{})
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
 
-		serializedPlan, err := json.MarshalIndent(plan, "", "  ")
+		serializedPlan, err := json.MarshalIndent(buildResult, "", "  ")
 		if err != nil {
 			return cli.Exit(err, 1)
 		}

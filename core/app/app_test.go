@@ -32,7 +32,8 @@ func TestApp(t *testing.T) {
 	require.Contains(t, content, "node-bun")
 
 	var packageJSON PackageJSON
-	app.ReadJSON("package.json", &packageJSON)
+	err = app.ReadJSON("package.json", &packageJSON)
+	require.NoError(t, err)
 	require.Equal(t, packageJSON.Name, "node-bun")
 
 	files, err := app.FindFiles("*.ts")

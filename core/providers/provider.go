@@ -6,6 +6,7 @@ import (
 )
 
 type Provider interface {
+	Name() string
 	Plan(ctx *generate.GenerateContext) (bool, error)
 }
 
