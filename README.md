@@ -22,3 +22,13 @@ go run cmd/cli/main.go --verbose build examples/node-bun \
   | buildctl build --local context=examples/node-bun --output type=docker,name=node \
   | docker load
 ```
+
+### Mise commands
+
+```bash
+# Lint and format
+mise run check
+
+# Run tests
+mise run test
+```
