@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/charmbracelet/log"
 	"github.com/railwayapp/railpack-go/buildkit"
@@ -48,17 +47,24 @@ var BuildCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		serializedPlan, err := json.MarshalIndent(buildResult, "", "  ")
+		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
+			ImageName: "railpack-go",
+		})
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
 
-		log.Infof("Plan:\n %s", string(serializedPlan))
+		// serializedPlan, err := json.MarshalIndent(buildResult, "", "  ")
+		// if err != nil {
+		// 	return cli.Exit(err, 1)
+		// }
 
-		err = buildkit.WriteLLB(buildResult.Plan)
-		if err != nil {
-			return cli.Exit(err, 1)
-		}
+		// log.Infof("Plan:\n %s", string(serializedPlan))
+
+		// err = buildkit.WriteLLB(buildResult.Plan)
+		// if err != nil {
+		// 	return cli.Exit(err, 1)
+		// }
 
 		return nil
 	},
