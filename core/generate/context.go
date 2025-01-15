@@ -1,22 +1,22 @@
 package generate
 
 import (
-	"github.com/railwayapp/railpack-go/core/app"
+	a "github.com/railwayapp/railpack-go/core/app"
 	"github.com/railwayapp/railpack-go/core/mise"
 	"github.com/railwayapp/railpack-go/core/plan"
 	"github.com/railwayapp/railpack-go/core/resolver"
 )
 
 type GenerateContext struct {
-	App         *app.App
-	Env         *app.Environment
+	App         *a.App
+	Env         *a.Environment
 	Resolver    *resolver.Resolver
 	Variables   map[string]string
 	AptPackages []string
 	Steps       map[string]*plan.Step
 }
 
-func NewGenerateContext(app *app.App, env *app.Environment) (*GenerateContext, error) {
+func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error) {
 	resolver, err := resolver.NewResolver(mise.TestInstallDir)
 	if err != nil {
 		return nil, err

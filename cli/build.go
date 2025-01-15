@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/charmbracelet/log"
+	"github.com/railwayapp/railpack-go/buildkit"
 	"github.com/railwayapp/railpack-go/core"
-	"github.com/railwayapp/railpack-go/core/app"
+	a "github.com/railwayapp/railpack-go/core/app"
 	"github.com/urfave/cli/v3"
 )
 
@@ -29,20 +30,20 @@ var BuildCommand = &cli.Command{
 			return cli.Exit("directory argument is required", 1)
 		}
 
-		userApp, err := app.NewApp(directory)
+		app, err := a.NewApp(directory)
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
 
-		log.Debugf("Building %s", userApp.Source)
+		log.Debugf("Building %s", app.Source)
 
 		envsArgs := cmd.StringSlice("env")
-		env, err := app.FromEnvs(envsArgs)
+		env, err := a.FromEnvs(envsArgs)
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
 
-		buildResult, err := core.GenerateBuildPlan(userApp, env, &core.GenerateBuildPlanOptions{})
+		buildResult, err := core.GenerateBuildPlan(app, env, &core.GenerateBuildPlanOptions{})
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
@@ -53,6 +54,11 @@ var BuildCommand = &cli.Command{
 		}
 
 		log.Infof("Plan:\n %s", string(serializedPlan))
+
+		err = buildkit.WriteLLB(buildResult.Plan)
+		if err != nil {
+			return cli.Exit(err, 1)
+		}
 
 		return nil
 	},

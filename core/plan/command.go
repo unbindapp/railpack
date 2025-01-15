@@ -27,13 +27,11 @@ type CopyCommand struct {
 	Dst string `json:"dst"`
 }
 
-// Implementation of Command interface for each type
 func (e ExecCommand) commandType() string       { return "exec" }
 func (g GlobalPathCommand) commandType() string { return "globalPath" }
 func (v VariableCommand) commandType() string   { return "variable" }
 func (c CopyCommand) commandType() string       { return "copy" }
 
-// Constructor functions
 func NewExecCommand(cmd string) Command {
 	return ExecCommand{Cmd: cmd}
 }

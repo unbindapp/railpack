@@ -66,7 +66,7 @@ func (r *Resolver) ResolvePackages() (map[string]*ResolvedPackage, error) {
 			return nil, err
 		}
 
-		log.Debugf("Resolved package version: %s %s %s %s", name, pkg.Version, latestVersion, pkg.Source)
+		log.Debugf("Resolved package version %s %s to %s from %s", name, pkg.Version, latestVersion, pkg.Source)
 
 		resolvedPkg := &ResolvedPackage{
 			Name:             name,
