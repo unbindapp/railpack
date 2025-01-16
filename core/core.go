@@ -24,6 +24,8 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 		return nil, err
 	}
 
+	generate.MiseStep(ctx)
+
 	for _, provider := range providers.GetLanguageProviders() {
 		matched, err := runProvider(provider, ctx)
 		if err != nil {
@@ -36,26 +38,25 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 		}
 	}
 
-	resolvedPackages, err := ctx.Resolver.ResolvePackages()
+	resolvedPackages, err := ctx.ResolvePackages()
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve packages: %w", err)
 	}
 
 	buildPlan := plan.NewBuildPlan()
 
+	buildStepOptions := &generate.BuildStepOptions{
+		ResolvedPackages: resolvedPackages,
+	}
+
 	buildPlan.Variables = ctx.Variables
-	for _, step := range ctx.Steps {
-		buildPlan.AddStep(*step)
-	}
-
-	for _, aptPackage := range ctx.AptPackages {
-		buildPlan.Packages.AddAptPackage(aptPackage)
-	}
-
-	for _, resolvedPackage := range resolvedPackages {
-		if resolvedPackage.ResolvedVersion != nil {
-			buildPlan.Packages.AddMisePackage(resolvedPackage.Name, *resolvedPackage.ResolvedVersion)
+	for _, stepBuilder := range ctx.Steps {
+		step, err := stepBuilder.Build(buildStepOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build step: %w", err)
 		}
+
+		buildPlan.AddStep(*step)
 	}
 
 	buildResult := &BuildResult{

@@ -14,7 +14,8 @@ type Command interface {
 
 // ExecCommand represents a command to be executed
 type ExecCommand struct {
-	Cmd string `json:"cmd"`
+	Cmd        string `json:"cmd"`
+	CustomName string `json:"custom_name,omitempty"`
 }
 
 // PathCommand represents a global path addition
@@ -34,41 +35,82 @@ type CopyCommand struct {
 	Dst string `json:"dst"`
 }
 
+// FileCommand represents a file creation operation
+type FileCommand struct {
+	Path string `json:"path"`
+
+	// The name of the file in the build step assets
+	Name string `json:"name"`
+
+	CustomName string `json:"custom_name,omitempty"`
+}
+
 func (e ExecCommand) commandType() string     { return "exec" }
 func (g PathCommand) commandType() string     { return "globalPath" }
 func (v VariableCommand) commandType() string { return "variable" }
 func (c CopyCommand) commandType() string     { return "copy" }
+func (f FileCommand) commandType() string     { return "file" }
 
-func NewExecCommand(cmd string) Command {
-	return ExecCommand{Cmd: cmd}
+func NewExecCommand(cmd string, customName ...string) Command {
+	exec := ExecCommand{Cmd: cmd}
+	if len(customName) > 0 {
+		exec.CustomName = customName[0]
+	}
+	return exec
 }
 
-func NewPathCommand(path string) Command {
-	return PathCommand{Path: path}
+func NewPathCommand(path string, customName ...string) Command {
+	pathCmd := PathCommand{Path: path}
+	return pathCmd
 }
 
-func NewVariableCommand(name, value string) Command {
-	return VariableCommand{Name: name, Value: value}
+func NewVariableCommand(name, value string, customName ...string) Command {
+	variableCmd := VariableCommand{Name: name, Value: value}
+	return variableCmd
 }
 
-func NewCopyCommand(src, dst string) Command {
-	return CopyCommand{Src: src, Dst: dst}
+func NewCopyCommand(src, dst string, customName ...string) Command {
+	copyCmd := CopyCommand{Src: src, Dst: dst}
+	return copyCmd
+}
+
+func NewFileCommand(path, name string, customName ...string) Command {
+	fileCmd := FileCommand{Path: path, Name: name}
+	if len(customName) > 0 {
+		fileCmd.CustomName = customName[0]
+	}
+	return fileCmd
 }
 
 func (e ExecCommand) MarshalJSON() ([]byte, error) {
-	return json.Marshal("RUN:" + e.Cmd)
+	prefix := "RUN"
+	if e.CustomName != "" {
+		prefix += "#" + e.CustomName
+	}
+	return json.Marshal(prefix + ":" + e.Cmd)
 }
 
 func (g PathCommand) MarshalJSON() ([]byte, error) {
-	return json.Marshal("PATH:" + g.Path)
+	prefix := "PATH"
+	return json.Marshal(prefix + ":" + g.Path)
 }
 
 func (v VariableCommand) MarshalJSON() ([]byte, error) {
-	return json.Marshal("ENV:" + v.Name + "=" + v.Value)
+	prefix := "ENV"
+	return json.Marshal(prefix + ":" + v.Name + "=" + v.Value)
 }
 
 func (c CopyCommand) MarshalJSON() ([]byte, error) {
-	return json.Marshal("COPY:" + c.Src + " " + c.Dst)
+	prefix := "COPY"
+	return json.Marshal(prefix + ":" + c.Src + " " + c.Dst)
+}
+
+func (f FileCommand) MarshalJSON() ([]byte, error) {
+	prefix := "FILE"
+	if f.CustomName != "" {
+		prefix += "#" + f.CustomName
+	}
+	return json.Marshal(prefix + ":" + f.Path + " " + f.Name)
 }
 
 func UnmarshalCommand(data []byte) (Command, error) {
@@ -82,26 +124,40 @@ func UnmarshalCommand(data []byte) (Command, error) {
 		return nil, fmt.Errorf("invalid command format: %s", str)
 	}
 
-	cmdType := parts[0]
+	prefix := parts[0]
 	payload := parts[1]
+
+	// Split prefix into command type and custom name
+	prefixParts := strings.SplitN(prefix, "#", 2)
+	cmdType := prefixParts[0]
+	customName := ""
+	if len(prefixParts) > 1 {
+		customName = prefixParts[1]
+	}
 
 	switch cmdType {
 	case "RUN":
-		return NewExecCommand(payload), nil
+		return NewExecCommand(payload, customName), nil
 	case "PATH":
-		return NewPathCommand(payload), nil
+		return NewPathCommand(payload, customName), nil
 	case "ENV":
 		envParts := strings.SplitN(payload, "=", 2)
 		if len(envParts) != 2 {
 			return nil, fmt.Errorf("invalid ENV format: %s", payload)
 		}
-		return NewVariableCommand(envParts[0], envParts[1]), nil
+		return NewVariableCommand(envParts[0], envParts[1], customName), nil
 	case "COPY":
 		copyParts := strings.Fields(payload)
 		if len(copyParts) != 2 {
 			return nil, fmt.Errorf("invalid COPY format: %s", payload)
 		}
-		return NewCopyCommand(copyParts[0], copyParts[1]), nil
+		return NewCopyCommand(copyParts[0], copyParts[1], customName), nil
+	case "FILE":
+		fileParts := strings.Fields(payload)
+		if len(fileParts) != 2 {
+			return nil, fmt.Errorf("invalid FILE format: %s", payload)
+		}
+		return NewFileCommand(fileParts[0], fileParts[1], customName), nil
 	}
 	return nil, fmt.Errorf("unknown command type: %s", cmdType)
 }

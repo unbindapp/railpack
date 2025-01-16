@@ -56,20 +56,17 @@ func (p *NodeProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *PackageJson) error {
 	corepack := p.usesCorepack(packageJson)
 	if corepack {
-		setup := plan.NewStep("setup")
+		setup := ctx.NewProviderStep("corepack")
 		setup.AddCommands([]plan.Command{
 			plan.NewCopyCommand("package.json", "."),
 			plan.NewExecCommand("npm install -g corepack"),
-			plan.NewExecCommand("corepack enable"),
-			plan.NewExecCommand("corepack prepare --activate"),
+			plan.NewExecCommand("corepack enable && corepack prepare --activate"),
 		})
-
-		ctx.AddStep(setup)
 	}
 
 	pkgManager := p.getPackageManager(ctx.App)
 
-	install := plan.NewStep("install")
+	install := ctx.NewProviderStep("install")
 	install.AddCommands([]plan.Command{
 		plan.NewCopyCommand(".", "."),
 		plan.NewExecCommand(pkgManager.InstallDeps()),
@@ -79,41 +76,42 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 		install.DependOn("setup")
 	}
 
-	ctx.AddStep(install)
 	return nil
 }
 
 func (p *NodeProvider) packages(ctx *generate.GenerateContext, packageJson *PackageJson) error {
 	packageManager := p.getPackageManager(ctx.App)
 
+	packages := ctx.NewPackageStep(p.Name() + " packages")
+
 	// Node
-	node := ctx.Resolver.Default("node", DEFAULT_NODE_VERSION)
+	node := packages.Default("node", DEFAULT_NODE_VERSION)
 
 	envVersion := ctx.Env.GetConfigVariable("NODE_VERSION")
 	if envVersion != "" {
-		ctx.Resolver.Version(node, envVersion, "RAILPACK_NODE_VERSION")
+		packages.Version(node, envVersion, "RAILPACK_NODE_VERSION")
 	}
 
 	if packageJson.Engines != nil && packageJson.Engines["node"] != "" {
-		ctx.Resolver.Version(node, packageJson.Engines["node"], "package.json > engines > node")
+		packages.Version(node, packageJson.Engines["node"], "package.json > engines > node")
 	}
 
 	if packageManager == PackageManagerBun {
-		bun := ctx.Resolver.Default("bun", DEFAULT_BUN_VERSION)
+		bun := packages.Default("bun", DEFAULT_BUN_VERSION)
 
 		envVersion := ctx.Env.GetConfigVariable("BUN_VERSION")
 		if envVersion != "" {
-			ctx.Resolver.Version(bun, envVersion, "RAILPACK_BUN_VERSION")
+			packages.Version(bun, envVersion, "RAILPACK_BUN_VERSION")
 		}
 	}
 
-	return p.managerPackages(ctx, packageManager)
+	return p.managerPackages(ctx, packages, packageManager)
 }
 
-func (p *NodeProvider) managerPackages(ctx *generate.GenerateContext, packageManager PackageManager) error {
+func (p *NodeProvider) managerPackages(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder, packageManager PackageManager) error {
 	// NPM
 	if packageManager == PackageManagerNpm {
-		npm := ctx.Resolver.Default("npm", "latest")
+		npm := packages.Default("npm", "latest")
 
 		lockfile, err := ctx.App.ReadFile("package-lock.json")
 		if err != nil {
@@ -121,35 +119,35 @@ func (p *NodeProvider) managerPackages(ctx *generate.GenerateContext, packageMan
 		}
 
 		if strings.Contains(lockfile, "\"lockfileVersion\": 1") {
-			ctx.Resolver.Version(npm, "6", "package-lock.json")
+			packages.Version(npm, "6", "package-lock.json")
 		} else if strings.Contains(lockfile, "\"lockfileVersion\": 2") {
-			ctx.Resolver.Version(npm, "8", "package-lock.json")
+			packages.Version(npm, "8", "package-lock.json")
 		}
 	}
 
 	// Pnpm
 	if packageManager == PackageManagerPnpm {
-		pnpm := ctx.Resolver.Default("pnpm", "latest")
+		pnpm := packages.Default("pnpm", "latest")
 
 		lockfile, err := ctx.App.ReadFile("pnpm-lock.yaml")
 		if err == nil {
 			if strings.HasPrefix(lockfile, "lockfileVersion: 5.3") {
-				ctx.Resolver.Version(pnpm, "6", "pnpm-lock.yaml")
+				packages.Version(pnpm, "6", "pnpm-lock.yaml")
 			} else if strings.HasPrefix(lockfile, "lockfileVersion: 5.4") {
-				ctx.Resolver.Version(pnpm, "7", "pnpm-lock.yaml")
+				packages.Version(pnpm, "7", "pnpm-lock.yaml")
 			} else if strings.HasPrefix(lockfile, "lockfileVersion: '6.0'") {
-				ctx.Resolver.Version(pnpm, "8", "pnpm-lock.yaml")
+				packages.Version(pnpm, "8", "pnpm-lock.yaml")
 			}
 		}
 	}
 
 	// Yarn
 	if packageManager == PackageManagerYarn1 {
-		ctx.Resolver.Default("yarn", "1")
-		ctx.AddAptPackage("tar")
-		ctx.AddAptPackage("gpg")
+		packages.Default("yarn", "1")
+		packages.AddAptPackage("tar")
+		packages.AddAptPackage("gpg")
 	} else if packageManager == PackageManagerYarn2 {
-		ctx.Resolver.Default("yarn", "2")
+		packages.Default("yarn", "2")
 	}
 
 	return nil

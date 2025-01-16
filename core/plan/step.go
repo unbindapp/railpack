@@ -5,8 +5,10 @@ import "encoding/json"
 type Step struct {
 	Name string `json:"name"`
 
-	DependsOn []string  `json:"depends_on,omitempty"`
-	Commands  []Command `json:"commands,omitempty"`
+	DependsOn []string          `json:"depends_on,omitempty"`
+	Commands  []Command         `json:"commands,omitempty"`
+	Outputs   []string          `json:"outputs,omitempty"`
+	Assets    map[string]string `json:"assets,omitempty"`
 }
 
 func NewStep(name string) *Step {

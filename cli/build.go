@@ -18,6 +18,11 @@ var BuildCommand = &cli.Command{
 			Name:  "env",
 			Usage: "environment variables to set",
 		},
+		&cli.BoolFlag{
+			Name:  "llb",
+			Usage: "output the LLB plan to stdout instead of building the image",
+			Value: false,
+		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		buildResult, app, err := GenerateBuildResultForCommand(cmd)
@@ -27,6 +32,7 @@ var BuildCommand = &cli.Command{
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
 			ImageName: "railpack-go",
+			DumpLLB:   cmd.Bool("llb"),
 		})
 		if err != nil {
 			return cli.Exit(err, 1)

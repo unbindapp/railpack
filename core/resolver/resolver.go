@@ -28,7 +28,7 @@ type ResolvedPackage struct {
 }
 
 type PackageRef struct {
-	name string
+	Name string
 }
 
 func NewRequestedPackage(name, defaultVersion string) *RequestedPackage {
@@ -87,11 +87,11 @@ func (r *Resolver) Get(name string) *RequestedPackage {
 
 func (r *Resolver) Default(name, defaultVersion string) PackageRef {
 	r.packages[name] = NewRequestedPackage(name, defaultVersion)
-	return PackageRef{name: name}
+	return PackageRef{Name: name}
 }
 
 func (r *Resolver) Version(ref PackageRef, version, source string) PackageRef {
-	if pkg, exists := r.packages[ref.name]; exists {
+	if pkg, exists := r.packages[ref.Name]; exists {
 		pkg.SetVersion(version, source)
 	}
 	return ref

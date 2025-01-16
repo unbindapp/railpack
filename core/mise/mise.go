@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 )
 
 const (
@@ -54,4 +56,31 @@ func (m *Mise) runCmd(args ...string) (string, error) {
 	}
 
 	return stdout.String(), nil
+}
+
+// MisePackage represents a single mise package configuration
+type MisePackage struct {
+	Version string `toml:"version"`
+}
+
+// MiseConfig represents the overall mise configuration
+type MiseConfig struct {
+	Tools map[string]MisePackage `toml:"tools"`
+}
+
+func GenerateMiseToml(packages map[string]string) (string, error) {
+	config := MiseConfig{
+		Tools: make(map[string]MisePackage),
+	}
+
+	for name, version := range packages {
+		config.Tools[name] = MisePackage{Version: version}
+	}
+
+	buf := bytes.NewBuffer(nil)
+	if err := toml.NewEncoder(buf).Encode(config); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }

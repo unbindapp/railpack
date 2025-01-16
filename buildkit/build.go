@@ -23,6 +23,7 @@ import (
 
 type BuildWithBuildkitClientOptions struct {
 	ImageName string
+	DumpLLB   bool
 }
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
@@ -67,6 +68,15 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	def, err := llbState.Marshal(ctx, llb.LinuxAmd64)
 	if err != nil {
 		return fmt.Errorf("error marshaling LLB state: %w", err)
+	}
+
+	if opts.DumpLLB {
+		log.Info("Dumping LLB to stdout")
+		err = llb.WriteTo(def, os.Stdout)
+		if err != nil {
+			return fmt.Errorf("error writing LLB definition: %w", err)
+		}
+		return nil
 	}
 
 	// Create a pipe to connect buildkit output to docker load
