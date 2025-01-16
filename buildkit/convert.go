@@ -5,11 +5,24 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/system"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/railwayapp/railpack-go/core/plan"
 )
 
-func ConvertPlanToLLB(plan *plan.BuildPlan) (*llb.State, *Image, error) {
-	state := llb.Image("ubuntu:noble")
+type ConvertPlanOptions struct {
+	BuildPlatform BuildPlatform
+}
+
+func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State, *Image, error) {
+	platform := specs.Platform{
+		OS:           opts.BuildPlatform.OS,
+		Architecture: opts.BuildPlatform.Architecture,
+		Variant:      opts.BuildPlatform.Variant,
+	}
+
+	state := llb.Image("ubuntu:noble",
+		llb.Platform(platform),
+	)
 
 	// Install curl
 	state = state.Run(llb.Shlex("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'"), llb.WithCustomName("install base apt packages")).
@@ -64,9 +77,19 @@ func ConvertPlanToLLB(plan *plan.BuildPlan) (*llb.State, *Image, error) {
 		}
 	}
 
-	image := Image{}
-	image.Config.Env = []string{
-		"PATH=/mise/shims:" + system.DefaultPathEnvUnix,
+	image := Image{
+		Image: specs.Image{
+			Platform: specs.Platform{
+				OS:           platform.OS,
+				Architecture: platform.Architecture,
+			},
+		},
+		Variant: platform.Variant,
+		Config: specs.ImageConfig{
+			Env: []string{
+				"PATH=/mise/shims:" + system.DefaultPathEnvUnix,
+			},
+		},
 	}
 
 	return &state, &image, nil

@@ -1,9 +1,11 @@
 package buildkit
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -11,10 +13,9 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/nerdctlcontainer"
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/appcontext"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
+	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/railwayapp/railpack-go/core/plan"
 	"github.com/tonistiigi/fsutil"
 )
@@ -27,9 +28,6 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	ctx := appcontext.Context()
 
 	imageName := getImageName(appDir)
-
-	// Connect to buildkit daemon
-	// If running in Docker, you'll need the address of your buildkit container
 
 	buildkitHost := os.Getenv("BUILDKIT_HOST")
 	if buildkitHost == "" {
@@ -45,73 +43,108 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	}
 	defer c.Close()
 
+	// Get the buildkit info early so we can ensure we can connect to the buildkit host
 	info, err := c.Info(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get buildkit info: %w", err)
 	}
 
-	log.Debugf("Buildkit version: %s", info.BuildkitVersion.Version)
+	buildPlatform := determineBuildPlatformFromHost()
 
-	// llbState, image, err := ConvertPlanToLLB(plan)
-	// if err != nil {
-	// 	return fmt.Errorf("error converting plan to LLB: %w", err)
-	// }
+	llbState, image, err := ConvertPlanToLLB(plan, ConvertPlanOptions{
+		BuildPlatform: buildPlatform,
+	})
+	if err != nil {
+		return fmt.Errorf("error converting plan to LLB: %w", err)
+	}
 
-	// imageBytes, err := json.Marshal(image)
-	// if err != nil {
-	// 	return fmt.Errorf("error marshalling image: %w", err)
-	// }
-
-	// fmt.Println(string(imageBytes))
-
-	llbState := llb.Image("ubuntu:noble")
+	imageBytes, err := json.Marshal(image)
+	if err != nil {
+		return fmt.Errorf("error marshalling image: %w", err)
+	}
 
 	def, err := llbState.Marshal(ctx, llb.LinuxAmd64)
 	if err != nil {
 		return fmt.Errorf("error marshaling LLB state: %w", err)
 	}
 
-	outputFS, err := fsutil.NewFS(appDir)
+	// Create a pipe to connect buildkit output to docker load
+	pipeR, pipeW := io.Pipe()
+	defer pipeR.Close()
+
+	ch := make(chan *client.SolveStatus)
+
+	// Pipe the image into `docker load`
+	// This is useful so that we don't have to connect the buildkit docker container to the local docker registry
+	// We likely don't want to be using this in production, but it is useful for local development
+	errCh := make(chan error, 1)
+	go func() {
+		cmd := exec.Command("docker", "load")
+		cmd.Stdin = pipeR
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		errCh <- cmd.Run()
+	}()
+
+	progressDone := make(chan bool)
+	go func() {
+		displayCh := make(chan *client.SolveStatus)
+		go func() {
+			for s := range ch {
+				displayCh <- s
+			}
+			close(displayCh)
+		}()
+
+		display, err := progressui.NewDisplay(os.Stdout, progressui.AutoMode)
+		if err != nil {
+			log.Error("failed to create progress display", "error", err)
+		}
+
+		display.UpdateFrom(ctx, displayCh)
+		progressDone <- true
+	}()
+
+	appFS, err := fsutil.NewFS(appDir)
 	if err != nil {
 		return fmt.Errorf("error creating FS: %w", err)
 	}
 
+	log.Debugf("Building image for %s with BuildKit %s", buildPlatform.String(), info.BuildkitVersion.Version)
+
 	res, err := c.Solve(ctx, def, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			"context": appFS,
+		},
 		Exports: []client.ExportEntry{
-			// {
-			// 	Type:      "local",
-			// 	OutputDir: "output",
-			// },
-			// {
-			// 	Type: "docker",
-			// 	Attrs: map[string]string{
-			// 		"name": opts.ImageName,
-			// 	},
-			// },
 			{
 				Type: client.ExporterDocker,
 				Attrs: map[string]string{
-					"name": imageName,
-					// "containerimage.config": string(imgJSON),
+					"name":                  imageName,
+					"containerimage.config": string(imageBytes),
 				},
 				Output: func(_ map[string]string) (io.WriteCloser, error) {
-					return os.Stdout, nil
+					return pipeW, nil
 				},
 			},
 		},
-		Session: []session.Attachable{
-			filesync.NewFSSyncProvider(filesync.StaticDirSource{
-				"output": outputFS,
-			}),
-		},
-	}, nil)
+	}, ch)
+
 	if err != nil {
 		return fmt.Errorf("failed to solve: %w", err)
 	}
 
-	fmt.Println(res)
+	pipeW.Close()
 
-	// res.AddMeta(exptypes.ExporterImageConfigKey, imageBytes)
+	// Wait for progress monitoring to complete
+	<-progressDone
+
+	// Wait for docker load to complete
+	if err := <-errCh; err != nil {
+		return fmt.Errorf("docker load failed: %w", err)
+	}
+
+	fmt.Printf("Result: %+v\n", res)
 
 	return nil
 }
