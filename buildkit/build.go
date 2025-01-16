@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/moby/buildkit/client"
@@ -112,7 +113,8 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 
 	log.Debugf("Building image for %s with BuildKit %s", buildPlatform.String(), info.BuildkitVersion.Version)
 
-	res, err := c.Solve(ctx, def, client.SolveOpt{
+	startTime := time.Now()
+	_, err = c.Solve(ctx, def, client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			"context": appFS,
 		},
@@ -144,7 +146,9 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 		return fmt.Errorf("docker load failed: %w", err)
 	}
 
-	fmt.Printf("Result: %+v\n", res)
+	buildDuration := time.Since(startTime)
+	log.Infof("Successfully built image in %.2fs", buildDuration.Seconds())
+	log.Infof("Run with `docker run -it %s`", imageName)
 
 	return nil
 }

@@ -3,6 +3,8 @@ package buildkit
 import (
 	"fmt"
 	"runtime"
+
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type BuildPlatform struct {
@@ -32,4 +34,12 @@ func determineBuildPlatformFromHost() BuildPlatform {
 
 func (p BuildPlatform) String() string {
 	return fmt.Sprintf("%s/%s", p.OS, p.Architecture)
+}
+
+func (p BuildPlatform) ToPlatform() specs.Platform {
+	return specs.Platform{
+		OS:           p.OS,
+		Architecture: p.Architecture,
+		Variant:      p.Variant,
+	}
 }

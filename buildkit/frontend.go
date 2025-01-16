@@ -5,23 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/log"
-	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gw "github.com/moby/buildkit/frontend/gateway/grpcclient"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/moby/buildkit/util/system"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/railwayapp/railpack-go/core/plan"
 )
 
 const (
-	localNameDockerfile = "dockerfile"
-	defaultRailpackPlan = "rpk"
+	// The default local mount of where to look for the config file
+	// This is "dockerfile" because that is commonly used for the config file mount
+	configMountName = "dockerfile"
+
+	// The default filename for the serialized Railpack plan
+	defaultRailpackPlan = "rpk.json"
 )
 
 func StartFrontend() {
@@ -35,43 +37,32 @@ func StartFrontend() {
 }
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
-	platform := platforms.DefaultSpec()
+	buildPlatform, err := validatePlatform(c.BuildOpts().Opts)
+	if err != nil {
+		return nil, err
+	}
 
 	plan, err := readRailpackPlan(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 
-	planLength := len(plan.Steps)
-
-	state := llb.Image("ubuntu:noble").
-		Dir("/app").
-		Run(llb.Shlex(fmt.Sprintf("sh -c 'echo %d > /app/length.txt'", planLength))).
-		Run(llb.Shlex("touch /app/test.txt"))
-
-	def, err := state.Marshal(ctx)
+	llbState, image, err := ConvertPlanToLLB(plan, ConvertPlanOptions{
+		BuildPlatform: buildPlatform,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error converting plan to LLB: %w", err)
 	}
 
-	// Configure the image and how it will start
-	imageConfig := Image{
-		Image: specs.Image{
-			Platform: platform,
-		},
-		Config: specs.ImageConfig{
-			Entrypoint: []string{"/bin/bash", "-c"},
-			Cmd:        []string{"npm run start"},
-			Env: []string{
-				"PATH=/mise/shims:" + system.DefaultPathEnvUnix,
-				"MISE_DATA_DIR=/mise",
-				"MISE_CONFIG_DIR=/mise",
-				"MISE_INSTALL_PATH=/usr/local/bin/mise",
-			},
-			WorkingDir: "/app",
-		},
+	def, err := llbState.Marshal(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling LLB state: %w", err)
 	}
-	imageConfigStr, _ := json.Marshal(imageConfig)
+
+	imageBytes, err := json.Marshal(image)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling image: %w", err)
+	}
 
 	res, err := c.Solve(ctx, client.SolveRequest{
 		Definition: def.ToPB(),
@@ -80,7 +71,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, err
 	}
 
-	res.AddMeta(exptypes.ExporterImageConfigKey, imageConfigStr)
+	res.AddMeta(exptypes.ExporterImageConfigKey, imageBytes)
 
 	return res, nil
 }
@@ -106,9 +97,37 @@ func readRailpackPlan(ctx context.Context, c client.Client) (*plan.BuildPlan, er
 	return plan, nil
 }
 
+// validatePlatform checks if the platform is supported and returns the corresponding BuildPlatform
+func validatePlatform(opts map[string]string) (BuildPlatform, error) {
+	platformStr := opts["platform"]
+	if platformStr == "" {
+		// Default to host platform if none specified
+		return determineBuildPlatformFromHost(), nil
+	}
+
+	// Error if multiple platforms are specified
+	if strings.Contains(platformStr, ",") {
+		return BuildPlatform{}, fmt.Errorf("multiple platforms are not supported, got: %s", platformStr)
+	}
+
+	// Match against supported platforms
+	switch platformStr {
+	case PlatformLinuxAMD64.String():
+		return PlatformLinuxAMD64, nil
+	case PlatformLinuxARM64.String():
+		return PlatformLinuxARM64, nil
+	default:
+		return BuildPlatform{}, fmt.Errorf("unsupported platform: %s. Must be one of: %s, %s",
+			platformStr,
+			PlatformLinuxAMD64.String(),
+			PlatformLinuxARM64.String())
+	}
+}
+
+// Read a file from the build context
 func readFile(ctx context.Context, c client.Client, filename string) (string, error) {
 	// Create a Local source for the dockerfile
-	src := llb.Local("context",
+	src := llb.Local(configMountName,
 		llb.FollowPaths([]string{filename}),
 		llb.SessionID(c.BuildOpts().SessionID),
 		llb.WithCustomName("load build definition from "+filename),

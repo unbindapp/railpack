@@ -14,11 +14,7 @@ type ConvertPlanOptions struct {
 }
 
 func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State, *Image, error) {
-	platform := specs.Platform{
-		OS:           opts.BuildPlatform.OS,
-		Architecture: opts.BuildPlatform.Architecture,
-		Variant:      opts.BuildPlatform.Variant,
-	}
+	platform := opts.BuildPlatform.ToPlatform()
 
 	state := llb.Image("ubuntu:noble",
 		llb.Platform(platform),
@@ -89,6 +85,7 @@ func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State
 			Env: []string{
 				"PATH=/mise/shims:" + system.DefaultPathEnvUnix,
 			},
+			WorkingDir: "/app",
 		},
 	}
 
