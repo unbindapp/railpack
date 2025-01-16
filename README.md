@@ -58,12 +58,11 @@ Now we can build the plan against an app directory:
 
 ```bash
 buildctl build \
-  --local context=examples/node-bun \ # The app directory to build
-  --local dockerfile=test \ # The path to the `rpk.json` file
-  --frontend=gateway.v0 \ # Specify that we are using a custom frontend
-  --opt source=ghcr.io/railwayapp/railpack-go:railpack-frontend \ # The frontend image to use
-  --output type=docker,name=test \ # The output type and name
-  | docker load # Pipe into docker load to get a docker image we can run
+  --local context=examples/node-bun \
+  --local dockerfile=test \
+  --frontend=gateway.v0 \
+  --opt source=ghcr.io/railwayapp/railpack-go:railpack-frontend \
+  --output type=docker,name=test | docker load
 ```
 
 To update the frontend image, you can run
