@@ -9,6 +9,7 @@ const (
 
 func MiseStep(ctx *GenerateContext) *ProviderStepBuilder {
 	step := ctx.NewProviderStep(MiseInstallStepName)
+	step.DependsOn = []string{}
 
 	step.AddCommands([]plan.Command{
 		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'", "install curl"),

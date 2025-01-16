@@ -130,6 +130,8 @@ func (b *PackageStepBuilder) Version(name resolver.PackageRef, version string, s
 func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error) {
 	step := plan.NewStep(b.DisplayName)
 
+	step.DependsOn = b.DependsOn
+
 	// Setup apt commands
 	if len(b.AptPackages) > 0 {
 		pkgString := strings.Join(b.AptPackages, " ")

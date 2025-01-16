@@ -21,26 +21,6 @@ func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State
 		llb.Platform(platform),
 	)
 
-	// Install curl
-	// state = state.Run(llb.Shlex("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'"), llb.WithCustomName("install base apt packages")).
-	// 	Root()
-
-	// if len(plan.Packages.Apt) > 0 {
-	// 	aptPackages := strings.Join(plan.Packages.Apt, " ")
-	// 	state = state.Run(llb.Shlex("sh -c 'apt-get update && apt-get install -y "+aptPackages+" && rm -rf /var/lib/apt/lists/*'"),
-	// 		llb.WithCustomNamef("install apt packages: %s", aptPackages)).
-	// 		Root()
-	// }
-
-	// // Install mise
-	// state = state.AddEnv("GIT_SSL_CAINFO", "/etc/ssl/certs/ca-certificates.crt").
-	// 	AddEnv("MISE_DATA_DIR", "/mise").
-	// 	AddEnv("MISE_CONFIG_DIR", "/mise").
-	// 	AddEnv("MISE_INSTALL_PATH", "/usr/local/bin/mise").
-	// 	AddEnv("PATH", "/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").
-	// 	Run(llb.Shlex("sh -c 'curl -fsSL https://mise.run | sh'"), llb.WithCustomName("install mise")).
-	// 	Root()
-
 	// Set working directory
 	state = state.Dir("/app")
 
@@ -49,39 +29,26 @@ func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State
 		state = state.AddEnv(name, value)
 	}
 
-	for _, step := range plan.Steps {
-		var err error
-		stepState, err := convertStepToLLB(&step, &state)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		state = *stepState
+	graph, err := NewBuildGraph(plan, &state)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	// Generate mise.toml
-	// miseToml, err := mise.GenerateMiseToml(plan.Packages.Mise)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
+	graphState, err := graph.GenerateLLB()
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// misePackages := make([]string, 0, len(plan.Packages.Mise))
-	// for k := range plan.Packages.Mise {
-	// 	misePackages = append(misePackages, k)
-	// }
+	state = *graphState
 
-	// // Install mise packages
-	// state = state.File(llb.Mkdir("/etc/mise", 0755, llb.WithParents(true)), llb.WithCustomName("create mise dir")).
-	// 	File(llb.Mkfile("/etc/mise/config.toml", 0644, []byte(miseToml)), llb.WithCustomName("create mise config")).
-	// 	Run(llb.Shlex("sh -c 'mise trust -a && mise install'"), llb.WithCustomNamef("install mise packages: %s", strings.Join(misePackages, ", "))).
-	// 	Root()
-
-	// // TODO: Be smarter about which steps build off each other based on step.DependsOn
-	// // Parallelize steps that don't depend on each other
 	// for _, step := range plan.Steps {
-	// 	for _, cmd := range step.Commands {
-	// 		state = convertCommandToLLB(cmd, &state)
+	// 	var err error
+	// 	stepState, err := convertStepToLLB(&step, &state)
+	// 	if err != nil {
+	// 		return nil, nil, err
 	// 	}
+
+	// 	state = *stepState
 	// }
 
 	image := Image{

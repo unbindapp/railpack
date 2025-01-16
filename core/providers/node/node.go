@@ -82,7 +82,7 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 func (p *NodeProvider) packages(ctx *generate.GenerateContext, packageJson *PackageJson) error {
 	packageManager := p.getPackageManager(ctx.App)
 
-	packages := ctx.NewPackageStep(p.Name() + " packages")
+	packages := ctx.NewPackageStep("packages")
 
 	// Node
 	node := packages.Default("node", DEFAULT_NODE_VERSION)
