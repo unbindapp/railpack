@@ -102,7 +102,10 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 			log.Error("failed to create progress display", "error", err)
 		}
 
-		display.UpdateFrom(ctx, displayCh)
+		_, err = display.UpdateFrom(ctx, displayCh)
+		if err != nil {
+			log.Error("failed to update progress display", "error", err)
+		}
 		progressDone <- true
 	}()
 

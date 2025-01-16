@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/log"
 	"github.com/urfave/cli/v3"
@@ -49,8 +50,11 @@ var PlanCommand = &cli.Command{
 			os.Stdout.Write([]byte("\n"))
 			return nil
 		} else {
-			err = os.WriteFile(output, serializedPlan, 0644)
+			if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+				return cli.Exit(err, 1)
+			}
 
+			err = os.WriteFile(output, serializedPlan, 0644)
 			if err != nil {
 				return cli.Exit(err, 1)
 			}
