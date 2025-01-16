@@ -35,7 +35,11 @@ func WriteLLB(plan *plan.BuildPlan) error {
 	if err != nil {
 		return fmt.Errorf("error marshaling LLB state: %w", err)
 	}
-	llb.WriteTo(dt, os.Stdout)
+
+	err = llb.WriteTo(dt, os.Stdout)
+	if err != nil {
+		return fmt.Errorf("error writing LLB state to stdout: %w", err)
+	}
 
 	return nil
 }

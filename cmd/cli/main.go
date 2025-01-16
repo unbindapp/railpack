@@ -13,6 +13,13 @@ var verbose bool
 
 func main() {
 
+	logger := log.Default()
+	logger.SetTimeFormat("")
+	urfaveLogWriter := logger.StandardLog(log.StandardLogOptions{
+		ForceLevel: log.ErrorLevel,
+	}).Writer()
+	urfave.ErrWriter = urfaveLogWriter
+
 	cmd := &urfave.Command{
 		Name:                  "railpack",
 		Usage:                 "Automatically analyze and generate build plans for applications",
@@ -32,7 +39,9 @@ func main() {
 			return ctx, nil
 		},
 		Commands: []*urfave.Command{
+			cli.PlanCommand,
 			cli.BuildCommand,
+			cli.FrontendCommand,
 		},
 	}
 

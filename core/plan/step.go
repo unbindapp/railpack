@@ -1,5 +1,7 @@
 package plan
 
+import "encoding/json"
+
 type Step struct {
 	Name string `json:"name"`
 
@@ -40,4 +42,29 @@ func MergeSteps(steps ...*Step) *Step {
 	}
 
 	return result
+}
+
+func (s *Step) UnmarshalJSON(data []byte) error {
+	type Alias Step
+	aux := &struct {
+		Commands []json.RawMessage `json:"commands"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.Commands = make([]Command, len(aux.Commands))
+	for i, rawCmd := range aux.Commands {
+		cmd, err := UnmarshalCommand(rawCmd)
+		if err != nil {
+			return err
+		}
+		s.Commands[i] = cmd
+	}
+
+	return nil
 }

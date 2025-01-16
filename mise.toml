@@ -17,6 +17,25 @@ golangci-lint run
 [tasks.tidy]
 run = "go mod tidy"
 
+[tasks.run-frontend]
+run = """
+# syntax=docker.io/library/railpack-frontend2
+echo 'FROM alpine:latest
+RUN echo "Hello"' | docker buildx build -f - .
+"""
+
+[tasks.build-and-push-frontend]
+run = """
+docker build -t railpack-frontend:latest \
+  --label "org.opencontainers.image.source=https://github.com/railwayapp/railpack-go" \
+  --label "org.opencontainers.image.description=BuildKit frontend for Railpack" \
+  --label "org.opencontainers.image.licenses=MIT" \
+  -f frontend.Dockerfile .
+
+docker tag railpack-frontend:latest ghcr.io/railwayapp/railpack-go:railpack-frontend
+docker push ghcr.io/railwayapp/railpack-go:railpack-frontend
+"""
+
 [tools.go]
 version = "1.23.4"
 

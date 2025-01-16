@@ -10,8 +10,6 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/nerdctlcontainer"
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/appcontext"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 	"github.com/railwayapp/railpack-go/core/plan"
@@ -24,6 +22,9 @@ type BuildWithBuildkitClientOptions struct {
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
 	ctx := appcontext.Context()
+
+	// Connect to buildkit daemon
+	// If running in Docker, you'll need the address of your buildkit container
 
 	buildkitHost := os.Getenv("BUILDKIT_HOST")
 	if buildkitHost == "" {
@@ -70,13 +71,9 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 		return fmt.Errorf("error creating FS: %w", err)
 	}
 
-	syncedDirs := filesync.StaticDirSource(map[string]fsutil.FS{
-		"context": appFS,
-	})
-
 	res, err := c.Solve(ctx, def, client.SolveOpt{
-		Session: []session.Attachable{
-			filesync.NewFSSyncProvider(syncedDirs),
+		LocalMounts: map[string]fsutil.FS{
+			"context": appFS,
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -92,6 +89,8 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	}
 
 	fmt.Println(res)
+
+	// res.AddMeta(exptypes.ExporterImageConfigKey, imageBytes)
 
 	return nil
 }

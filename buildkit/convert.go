@@ -9,11 +9,10 @@ import (
 )
 
 func ConvertPlanToLLB(plan *plan.BuildPlan) (*llb.State, *Image, error) {
-	base := llb.Image("ubuntu:noble")
-	state := base
+	state := llb.Image("ubuntu:noble")
 
 	// Install curl
-	state = base.Run(llb.Shlex("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'"), llb.WithCustomName("install base apt packages")).
+	state = state.Run(llb.Shlex("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'"), llb.WithCustomName("install base apt packages")).
 		Root()
 
 	if len(plan.Packages.Apt) > 0 {
@@ -77,8 +76,8 @@ func convertCommandToLLB(cmd plan.Command, state *llb.State) llb.State {
 	switch cmd := cmd.(type) {
 	case plan.ExecCommand:
 		return state.Run(llb.Shlex(cmd.Cmd)).Root()
-	case plan.GlobalPathCommand:
-		return state.Run(llb.Shlex(cmd.GlobalPath)).Root()
+	case plan.PathCommand:
+		return state.Run(llb.Shlex(cmd.Path)).Root()
 	case plan.VariableCommand:
 		return state.AddEnv(cmd.Name, cmd.Value)
 	case plan.CopyCommand:
