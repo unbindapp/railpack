@@ -32,7 +32,7 @@ var BuildCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		serializedPlan, err := json.MarshalIndent(buildResult.Plan, "", "  ")
+		serializedPlan, err := json.MarshalIndent(buildResult, "", "  ")
 		if err != nil {
 			return cli.Exit(err, 1)
 		}

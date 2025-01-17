@@ -2,6 +2,7 @@ package buildkit
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/railwayapp/railpack-go/core/plan"
@@ -9,8 +10,7 @@ import (
 
 type Node struct {
 	Step       *plan.Step
-	BaseState  *llb.State
-	DiffState  *llb.State
+	State      *llb.State
 	Parents    []*Node
 	Children   []*Node
 	Processed  bool
@@ -55,113 +55,112 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, err
 }
 
 func (g *BuildGraph) GenerateLLB() (*llb.State, error) {
-	// Find root nodes
-	roots := make([]*Node, 0)
-	for _, node := range g.Nodes {
-		if len(node.Parents) == 0 {
-			roots = append(roots, node)
-		}
+	// Get processing order using topological sort
+	order, err := g.getProcessingOrder()
+	if err != nil {
+		return nil, err
 	}
 
-	for _, root := range roots {
-		fmt.Printf("Root: %s\n", root.Step.Name)
-	}
-
-	for _, root := range roots {
-		if err := g.processNode(root); err != nil {
+	// Process all nodes in order
+	for _, node := range order {
+		if err := g.processNode(node); err != nil {
 			return nil, err
 		}
 	}
 
-	// Verify all nodes were processed
+	// Find all leaf nodes and get their states
+	var leafStates []llb.State
+	var leafStepNames []string
 	for _, node := range g.Nodes {
-		if !node.Processed {
-			return nil, fmt.Errorf("node %s was not processed", node.Step.Name)
+		if len(node.Children) == 0 && node.State != nil {
+			leafStates = append(leafStates, *node.State)
+			leafStepNames = append(leafStepNames, node.Step.Name)
 		}
 	}
 
-	// Find all leaf nodes and get their diffs
-	var diffs []*llb.State
-	for _, node := range g.Nodes {
-		if len(node.Children) == 0 && node.DiffState != nil {
-			diffs = append(diffs, node.DiffState)
-		}
-	}
-
-	// Merge the base state with all the diffs
-	if len(diffs) == 0 {
+	// If no leaf states, return base state
+	if len(leafStates) == 0 {
 		return g.BaseState, nil
 	}
 
-	statesToMerge := make([]llb.State, len(diffs))
-	for i, diff := range diffs {
-		statesToMerge[i] = *diff
+	// If only one leaf state, return it
+	if len(leafStates) == 1 {
+		return &leafStates[0], nil
 	}
-	result := llb.Merge(statesToMerge)
+
+	// Merge all leaf states
+	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(leafStepNames, ", "))
+	result := llb.Merge(leafStates, llb.WithCustomName(mergeName))
 	return &result, nil
 }
 
 func (g *BuildGraph) processNode(node *Node) error {
 	fmt.Printf("Processing node: %s\n", node.Step.Name)
 
-	if node.InProgress {
-		return fmt.Errorf("Circular dependency detected at step %s", node.Step.Name)
-	}
-
+	// If already processed, we're done
 	if node.Processed {
 		return nil
 	}
 
-	node.InProgress = true
-
-	// Process parents
+	// Check if all parents are processed
 	for _, parent := range node.Parents {
-		if err := g.processNode(parent); err != nil {
-			return err
+		if !parent.Processed {
+			// If this node is marked in-progress, we have a dependency violation
+			if node.InProgress {
+				fmt.Printf("Dependencies for %s:\n", node.Step.Name)
+				for _, dep := range node.Parents {
+					fmt.Printf("  %s (processed: %v, in-progress: %v)\n",
+						dep.Step.Name, dep.Processed, dep.InProgress)
+				}
+				return fmt.Errorf("Dependency violation: %s waiting for unprocessed parent %s",
+					node.Step.Name, parent.Step.Name)
+			}
+
+			// Mark this node as in-progress and process the parent
+			node.InProgress = true
+			if err := g.processNode(parent); err != nil {
+				node.InProgress = false
+				return err
+			}
+			node.InProgress = false
 		}
 	}
 
-	var fullState *llb.State
+	// Determine the state to build upon
+	var currentState *llb.State
+
 	if len(node.Parents) == 0 {
-		fullState = g.BaseState
+		currentState = g.BaseState
+	} else if len(node.Parents) == 1 {
+		// If only one parent, use its state directly
+		currentState = node.Parents[0].State
 	} else {
-		parentDifs := make([]*llb.State, len(node.Parents))
-		for _, parent := range node.Parents {
-			if parent.DiffState != nil {
-				parentDifs = append(parentDifs, parent.DiffState)
+		// If multiple parents, merge their states
+		parentStates := make([]llb.State, len(node.Parents))
+		mergeStepNames := make([]string, len(node.Parents))
+
+		for i, parent := range node.Parents {
+			if parent.State == nil {
+				return fmt.Errorf("Parent %s of %s has nil state",
+					parent.Step.Name, node.Step.Name)
 			}
+			parentStates[i] = *parent.State
+			mergeStepNames[i] = parent.Step.Name
 		}
 
-		statesToMerge := make([]llb.State, 1, len(node.Parents)+1)
-		statesToMerge[0] = *g.BaseState
-		for _, diff := range parentDifs {
-			if diff != nil {
-				statesToMerge = append(statesToMerge, *diff)
-			}
-		}
-
-		merged := llb.Merge(statesToMerge)
-		fullState = &merged
+		mergeName := fmt.Sprintf("merging steps: %s", strings.Join(mergeStepNames, ", "))
+		merged := llb.Merge(parentStates, llb.WithCustomName(mergeName))
+		currentState = &merged
 	}
 
-	// Convert this node to LLB
-	stepState, err := convertStepToLLB2(node.Step, fullState)
+	// Convert this node's step to LLB
+	stepState, err := convertStepToLLB2(node.Step, currentState)
 	if err != nil {
 		return err
 	}
 
-	diff := llb.Diff(*fullState, *stepState)
-	node.BaseState = fullState
-	node.DiffState = &diff
+	node.State = stepState
 	node.Processed = true
-	node.InProgress = false
-
-	// Process all children nodes
-	for _, child := range node.Children {
-		if err := g.processNode(child); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
@@ -176,6 +175,61 @@ func convertStepToLLB2(step *plan.Step, baseState *llb.State) (*llb.State, error
 		}
 	}
 	return state, nil
+}
+
+// getProcessingOrder returns nodes in topological order
+func (g *BuildGraph) getProcessingOrder() ([]*Node, error) {
+	order := make([]*Node, 0, len(g.Nodes))
+	visited := make(map[string]bool)
+	temp := make(map[string]bool)
+
+	var visit func(node *Node) error
+	visit = func(node *Node) error {
+		if temp[node.Step.Name] {
+			return fmt.Errorf("cycle detected: %s", node.Step.Name)
+		}
+		if visited[node.Step.Name] {
+			return nil
+		}
+		temp[node.Step.Name] = true
+
+		for _, parent := range node.Parents {
+			if err := visit(parent); err != nil {
+				return err
+			}
+		}
+
+		delete(temp, node.Step.Name)
+		visited[node.Step.Name] = true
+		order = append(order, node)
+		return nil
+	}
+
+	// Start with leaf nodes (nodes with no children)
+	for _, node := range g.Nodes {
+		if len(node.Children) == 0 {
+			if err := visit(node); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Process any remaining nodes
+	for _, node := range g.Nodes {
+		if !visited[node.Step.Name] {
+			if err := visit(node); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Reverse the order since we want parents before children
+	for i := 0; i < len(order)/2; i++ {
+		j := len(order) - 1 - i
+		order[i], order[j] = order[j], order[i]
+	}
+
+	return order, nil
 }
 
 func (g *BuildGraph) PrintGraph() {

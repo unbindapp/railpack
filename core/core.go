@@ -26,6 +26,21 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 
 	generate.MiseStep(ctx)
 
+	boop := ctx.NewProviderStep("boop")
+	boop.AddCommands([]plan.Command{
+		plan.NewExecCommand("echo 'boop'"),
+		plan.NewExecCommand("touch hello.txt"),
+		plan.NewExecCommand("touch boop.txt"),
+	})
+	boop.DependsOn = []string{generate.MiseInstallStepName}
+
+	wat := ctx.NewProviderStep("wat")
+	wat.AddCommands([]plan.Command{
+		plan.NewExecCommand("echo 'wat'"),
+		plan.NewExecCommand("touch wat.txt"),
+	})
+	wat.DependsOn = []string{generate.MiseInstallStepName, "install", "boop"}
+
 	for _, provider := range providers.GetLanguageProviders() {
 		matched, err := runProvider(provider, ctx)
 		if err != nil {
