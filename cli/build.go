@@ -25,6 +25,14 @@ var BuildCommand = &cli.Command{
 			Usage: "output the LLB plan to stdout instead of building the image",
 			Value: false,
 		},
+		&cli.StringFlag{
+			Name:  "output",
+			Usage: "output the final filesystem to a local directory",
+		},
+		&cli.StringFlag{
+			Name:  "step",
+			Usage: "only run to a specific step",
+		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		buildResult, app, err := GenerateBuildResultForCommand(cmd)
@@ -43,22 +51,11 @@ var BuildCommand = &cli.Command{
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
 			ImageName: "railpack-go",
 			DumpLLB:   cmd.Bool("llb"),
+			OutputDir: cmd.String("output"),
 		})
 		if err != nil {
 			return cli.Exit(err, 1)
 		}
-
-		// serializedPlan, err := json.MarshalIndent(buildResult, "", "  ")
-		// if err != nil {
-		// 	return cli.Exit(err, 1)
-		// }
-
-		// log.Infof("Plan:\n %s", string(serializedPlan))
-
-		// err = buildkit.WriteLLB(buildResult.Plan)
-		// if err != nil {
-		// 	return cli.Exit(err, 1)
-		// }
 
 		return nil
 	},

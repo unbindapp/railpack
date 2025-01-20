@@ -22,8 +22,10 @@ import (
 )
 
 type BuildWithBuildkitClientOptions struct {
-	ImageName string
-	DumpLLB   bool
+	ImageName  string
+	DumpLLB    bool
+	OutputDir  string
+	OutputStep string
 }
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
@@ -79,23 +81,27 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 		return nil
 	}
 
-	// Create a pipe to connect buildkit output to docker load
-	pipeR, pipeW := io.Pipe()
-	defer pipeR.Close()
-
 	ch := make(chan *client.SolveStatus)
 
-	// Pipe the image into `docker load`
-	// This is useful so that we don't have to connect the buildkit docker container to the local docker registry
-	// We likely don't want to be using this in production, but it is useful for local development
+	var pipeR *io.PipeReader
+	var pipeW *io.PipeWriter
 	errCh := make(chan error, 1)
-	go func() {
-		cmd := exec.Command("docker", "load")
-		cmd.Stdin = pipeR
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		errCh <- cmd.Run()
-	}()
+
+	// Only set up pipe and docker load if we're not saving to a directory
+	if opts.OutputDir == "" {
+		// Create a pipe to connect buildkit output to docker load
+		pipeR, pipeW = io.Pipe()
+		defer pipeR.Close()
+
+		// Pipe the image into `docker load`
+		go func() {
+			cmd := exec.Command("docker", "load")
+			cmd.Stdin = pipeR
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			errCh <- cmd.Run()
+		}()
+	}
 
 	progressDone := make(chan bool)
 	go func() {
@@ -126,8 +132,7 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 
 	log.Debugf("Building image for %s with BuildKit %s", buildPlatform.String(), info.BuildkitVersion.Version)
 
-	startTime := time.Now()
-	_, err = c.Solve(ctx, def, client.SolveOpt{
+	solveOpts := client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			"context": appFS,
 		},
@@ -143,25 +148,57 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 				},
 			},
 		},
-	}, ch)
+	}
+
+	// Save the resulting filesystem to a directory
+	if opts.OutputDir != "" {
+		err = os.MkdirAll(opts.OutputDir, 0755)
+		if err != nil {
+			return fmt.Errorf("error creating output directory: %w", err)
+		}
+
+		solveOpts = client.SolveOpt{
+			LocalMounts: map[string]fsutil.FS{
+				"context": appFS,
+			},
+			Exports: []client.ExportEntry{
+				{
+					Type:      client.ExporterLocal,
+					OutputDir: opts.OutputDir,
+				},
+			},
+		}
+	}
+
+	startTime := time.Now()
+	_, err = c.Solve(ctx, def, solveOpts, ch)
 
 	if err != nil {
 		return fmt.Errorf("failed to solve: %w", err)
 	}
 
-	pipeW.Close()
+	if pipeW != nil {
+		pipeW.Close()
+	}
 
 	// Wait for progress monitoring to complete
 	<-progressDone
 
-	// Wait for docker load to complete
-	if err := <-errCh; err != nil {
-		return fmt.Errorf("docker load failed: %w", err)
+	// Only wait for docker load if we used it
+	if opts.OutputDir == "" {
+		if err := <-errCh; err != nil {
+			return fmt.Errorf("docker load failed: %w", err)
+		}
 	}
 
 	buildDuration := time.Since(startTime)
 	log.Infof("Successfully built image in %.2fs", buildDuration.Seconds())
-	log.Infof("Run with `docker run -it %s`", imageName)
+
+	if opts.OutputDir != "" {
+		log.Infof("Saved image filesystem to directory `%s`", opts.OutputDir)
+	} else {
+		log.Infof("Run with `docker run -it %s`", imageName)
+	}
 
 	return nil
 }
