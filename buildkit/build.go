@@ -57,6 +57,7 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 
 	llbState, image, err := ConvertPlanToLLB(plan, ConvertPlanOptions{
 		BuildPlatform: buildPlatform,
+		OutputStep:    opts.OutputStep,
 	})
 	if err != nil {
 		return fmt.Errorf("error converting plan to LLB: %w", err)

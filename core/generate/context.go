@@ -46,6 +46,7 @@ type ProviderStepBuilder struct {
 	DisplayName string
 	DependsOn   []string
 	Commands    []plan.Command
+	Outputs     []string
 }
 
 func (c *GenerateContext) NewProviderStep(name string) *ProviderStepBuilder {
@@ -53,6 +54,7 @@ func (c *GenerateContext) NewProviderStep(name string) *ProviderStepBuilder {
 		DisplayName: name,
 		DependsOn:   []string{PackagesStepName},
 		Commands:    []plan.Command{},
+		Outputs:     []string{},
 	}
 
 	c.Steps = append(c.Steps, step)
@@ -103,6 +105,7 @@ func (b *ProviderStepBuilder) Build(options *BuildStepOptions) (*plan.Step, erro
 
 	step.DependsOn = b.DependsOn
 	step.Commands = b.Commands
+	step.Outputs = b.Outputs
 
 	return step, nil
 }

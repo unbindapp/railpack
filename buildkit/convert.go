@@ -12,6 +12,7 @@ import (
 
 type ConvertPlanOptions struct {
 	BuildPlatform BuildPlatform
+	OutputStep    string
 }
 
 func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State, *Image, error) {
@@ -34,22 +35,22 @@ func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State
 		return nil, nil, err
 	}
 
-	graphState, err := graph.GenerateLLB()
+	graphState, err := graph.GenerateLLB(opts.OutputStep)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	state = *graphState
 
-	// for _, step := range plan.Steps {
-	// 	var err error
-	// 	stepState, err := convertStepToLLB(&step, &state)
-	// 	if err != nil {
-	// 		return nil, nil, err
-	// 	}
+	// scratchState := llb.Scratch()
+	// result := scratchState.File(llb.Copy(state, "/app", "/app", &llb.CopyInfo{
+	// 	CreateDestPath:      true,
+	// 	AllowWildcard:       true,
+	// 	CopyDirContentsOnly: false,
+	// 	FollowSymlinks:      true,
+	// }))
 
-	// 	state = *stepState
-	// }
+	// state = result
 
 	image := Image{
 		Image: specs.Image{
@@ -93,19 +94,23 @@ func convertCommandToLLB(cmd plan.Command, state *llb.State, step *plan.Step) (*
 		}
 		s := state.Run(opts...).Root()
 		return &s, nil
+
 	case plan.PathCommand:
 		// TODO: Build up the path so we are not starting from scratch each time
 		s := state.AddEnvf("PATH", "%s:%s", cmd.Path, system.DefaultPathEnvUnix)
 		return &s, nil
+
 	case plan.VariableCommand:
 		s := state.AddEnv(cmd.Name, cmd.Value)
 		return &s, nil
+
 	case plan.CopyCommand:
 		src := llb.Local("context")
 		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
 			CopyDirContentsOnly: true,
 		}))
 		return &s, nil
+
 	case plan.FileCommand:
 		asset, ok := step.Assets[cmd.Name]
 		if !ok {
