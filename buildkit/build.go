@@ -22,16 +22,18 @@ import (
 )
 
 type BuildWithBuildkitClientOptions struct {
-	ImageName  string
-	DumpLLB    bool
-	OutputDir  string
-	OutputStep string
+	ImageName string
+	DumpLLB   bool
+	OutputDir string
 }
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
 	ctx := appcontext.Context()
 
-	imageName := getImageName(appDir)
+	imageName := opts.ImageName
+	if imageName == "" {
+		imageName = getImageName(appDir)
+	}
 
 	buildkitHost := os.Getenv("BUILDKIT_HOST")
 	if buildkitHost == "" {
@@ -57,7 +59,6 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 
 	llbState, image, err := ConvertPlanToLLB(plan, ConvertPlanOptions{
 		BuildPlatform: buildPlatform,
-		OutputStep:    opts.OutputStep,
 	})
 	if err != nil {
 		return fmt.Errorf("error converting plan to LLB: %w", err)

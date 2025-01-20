@@ -54,7 +54,7 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, err
 	return graph, nil
 }
 
-func (g *BuildGraph) GenerateLLB(stepName string) (*llb.State, error) {
+func (g *BuildGraph) GenerateLLB() (*llb.State, error) {
 	// Get processing order using topological sort
 	order, err := g.getProcessingOrder()
 	if err != nil {
@@ -66,15 +66,6 @@ func (g *BuildGraph) GenerateLLB(stepName string) (*llb.State, error) {
 		if err := g.processNode(node); err != nil {
 			return nil, err
 		}
-	}
-
-	if stepName != "" {
-		stepNode, ok := g.Nodes[stepName]
-		if !ok {
-			return nil, fmt.Errorf("step %s not found", stepName)
-		}
-
-		return stepNode.State, nil
 	}
 
 	// Find all leaf nodes and get their states
@@ -183,22 +174,6 @@ func convertStepToLLB2(step *plan.Step, baseState *llb.State) (*llb.State, error
 	}
 
 	if step.Outputs != nil && len(step.Outputs) > 0 {
-		// scratchState := llb.Scratch()
-		// copyInfo := llb.Copy(*state, state, "/home", &llb.CopyInfo{
-		// 	CreateDestPath:      true,
-		// 	AllowWildcard:       true,
-		// 	CopyDirContentsOnly: false,
-		// 	FollowSymlinks:      true,
-		// })
-
-		// fmt.Printf("CopyInfo: %+v\n", copyInfo)
-
-		// result := scratchState.File(copyInfo)
-
-		// fmt.Printf("Result: %+v\n", result)
-
-		// state = &result
-
 		result := llb.Scratch()
 
 		for _, output := range step.Outputs {
@@ -211,10 +186,8 @@ func convertStepToLLB2(step *plan.Step, baseState *llb.State) (*llb.State, error
 			}))
 		}
 
-		merged := llb.Merge([]llb.State{*state, result}, llb.WithCustomName(fmt.Sprintf("merging steps: %s", step.Name)))
+		merged := llb.Merge([]llb.State{*state, result})
 		state = &merged
-
-		// state = &result
 	}
 
 	return state, nil

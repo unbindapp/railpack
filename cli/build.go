@@ -16,6 +16,10 @@ var BuildCommand = &cli.Command{
 	ArgsUsage:             "DIRECTORY",
 	EnableShellCompletion: true,
 	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "name",
+			Usage: "name of the image to build",
+		},
 		&cli.StringSliceFlag{
 			Name:  "env",
 			Usage: "environment variables to set",
@@ -28,10 +32,6 @@ var BuildCommand = &cli.Command{
 		&cli.StringFlag{
 			Name:  "output",
 			Usage: "output the final filesystem to a local directory",
-		},
-		&cli.StringFlag{
-			Name:  "step",
-			Usage: "only run to a specific step",
 		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -49,7 +49,7 @@ var BuildCommand = &cli.Command{
 		os.Stdout.Write([]byte("\n"))
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
-			ImageName: "railpack-go",
+			ImageName: cmd.String("name"),
 			DumpLLB:   cmd.Bool("llb"),
 			OutputDir: cmd.String("output"),
 		})

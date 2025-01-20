@@ -64,17 +64,17 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 		})
 	}
 
-	// pkgManager := p.getPackageManager(ctx.App)
+	pkgManager := p.getPackageManager(ctx.App)
 
-	// install := ctx.NewProviderStep("install")
-	// install.AddCommands([]plan.Command{
-	// 	plan.NewCopyCommand(".", "."),
-	// 	plan.NewExecCommand(pkgManager.InstallDeps()),
-	// })
+	install := ctx.NewProviderStep("install")
+	install.AddCommands([]plan.Command{
+		plan.NewCopyCommand(".", "."),
+		plan.NewExecCommand(pkgManager.InstallDeps()),
+	})
 
-	// if corepack {
-	// 	install.DependOn("setup")
-	// }
+	if corepack {
+		install.DependOn("setup")
+	}
 
 	return nil
 }

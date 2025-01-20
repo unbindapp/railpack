@@ -12,7 +12,6 @@ import (
 
 type ConvertPlanOptions struct {
 	BuildPlatform BuildPlatform
-	OutputStep    string
 }
 
 func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State, *Image, error) {
@@ -35,22 +34,12 @@ func ConvertPlanToLLB(plan *plan.BuildPlan, opts ConvertPlanOptions) (*llb.State
 		return nil, nil, err
 	}
 
-	graphState, err := graph.GenerateLLB(opts.OutputStep)
+	graphState, err := graph.GenerateLLB()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	state = *graphState
-
-	// scratchState := llb.Scratch()
-	// result := scratchState.File(llb.Copy(state, "/app", "/app", &llb.CopyInfo{
-	// 	CreateDestPath:      true,
-	// 	AllowWildcard:       true,
-	// 	CopyDirContentsOnly: false,
-	// 	FollowSymlinks:      true,
-	// }))
-
-	// state = result
 
 	image := Image{
 		Image: specs.Image{

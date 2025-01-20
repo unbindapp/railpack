@@ -20,7 +20,6 @@ func MiseStep(ctx *GenerateContext) *ProviderStepBuilder {
 		plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'", "install mise"),
 	})
 
-	// step.Outputs = []string{"/mise/shims", "/mise/install"}
 	step.Outputs = []string{"/usr/local/bin/mise"}
 
 	return step

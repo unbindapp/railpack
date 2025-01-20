@@ -57,10 +57,7 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 			return nil, fmt.Errorf("failed to build step: %w", err)
 		}
 
-		if step.Name == "mise" {
-			buildPlan.AddStep(*step)
-		}
-
+		buildPlan.AddStep(*step)
 	}
 
 	buildResult := &BuildResult{
