@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/railwayapp/railpack-go/core/app"
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
@@ -69,12 +70,8 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	install := ctx.NewProviderStep("install")
 
 	install.AddCommands([]plan.Command{
-		plan.NewVariableCommand("MISE_DATA_DIR", "/mise"),
-		plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
-		plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
-		plan.NewPathCommand("/mise/shims"),
 		plan.NewCopyCommand(".", "."),
-		plan.NewExecCommand(pkgManager.InstallDeps()),
+		plan.NewExecCommand(pkgManager.InstallDeps(ctx.App)),
 	})
 
 	if corepack {
@@ -120,7 +117,8 @@ func (p *NodeProvider) managerPackages(ctx *generate.GenerateContext, packages *
 
 		lockfile, err := ctx.App.ReadFile("package-lock.json")
 		if err != nil {
-			return fmt.Errorf("error reading package-lock.json: %w", err)
+			log.Warn("package-lock.json not found")
+			lockfile = ""
 		}
 
 		if strings.Contains(lockfile, "\"lockfileVersion\": 1") {

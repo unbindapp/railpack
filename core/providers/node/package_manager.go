@@ -1,6 +1,10 @@
 package node
 
-import "fmt"
+import (
+	"fmt"
+
+	a "github.com/railwayapp/railpack-go/core/app"
+)
 
 const (
 	PackageManagerNpm   PackageManager = "npm"
@@ -25,10 +29,14 @@ func (p PackageManager) Name() string {
 	}
 }
 
-func (p PackageManager) InstallDeps() string {
+func (p PackageManager) InstallDeps(app *a.App) string {
 	switch p {
 	case PackageManagerNpm:
-		return "npm ci"
+		hasLockfile := app.HasMatch("package-lock.json")
+		if hasLockfile {
+			return "npm ci"
+		}
+		return "npm install"
 	case PackageManagerPnpm:
 		return "pnpm install --frozen-lockfile"
 	case PackageManagerBun:
