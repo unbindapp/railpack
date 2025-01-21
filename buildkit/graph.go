@@ -2,26 +2,21 @@ package buildkit
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/util/system"
 	"github.com/railwayapp/railpack-go/core/plan"
 )
-
-type Node struct {
-	Step       *plan.Step
-	State      *llb.State
-	Parents    []*Node
-	Children   []*Node
-	Processed  bool
-	InProgress bool
-}
 
 type BuildGraph struct {
 	Nodes     map[string]*Node
 	BaseState *llb.State
+}
+
+type BuildGraphOutput struct {
+	State    *llb.State
+	PathList []string
+	EnvVars  map[string]string
 }
 
 func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, error) {
@@ -34,10 +29,12 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, err
 	for i := range plan.Steps {
 		step := &plan.Steps[i]
 		graph.Nodes[step.Name] = &Node{
-			Step:      step,
-			Parents:   make([]*Node, 0),
-			Children:  make([]*Node, 0),
-			Processed: false,
+			Step:           step,
+			Parents:        make([]*Node, 0),
+			Children:       make([]*Node, 0),
+			Processed:      false,
+			OutputEnvVars:  make(map[string]string),
+			OutputPathList: make([]string, 0),
 		}
 	}
 
@@ -56,7 +53,7 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, err
 	return graph, nil
 }
 
-func (g *BuildGraph) GenerateLLB() (*llb.State, error) {
+func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 	// Get processing order using topological sort
 	order, err := g.getProcessingOrder()
 	if err != nil {
@@ -73,27 +70,51 @@ func (g *BuildGraph) GenerateLLB() (*llb.State, error) {
 	// Find all leaf nodes and get their states
 	var leafStates []llb.State
 	var leafStepNames []string
+
+	outputPathList := make([]string, 0)
+	outputEnvVars := make(map[string]string)
+
 	for _, node := range g.Nodes {
 		if len(node.Children) == 0 && node.State != nil {
 			leafStates = append(leafStates, *node.State)
 			leafStepNames = append(leafStepNames, node.Step.Name)
+
+			// Add output path and env vars
+			outputPathList = append(outputPathList, node.OutputPathList...)
+			for k, v := range node.OutputEnvVars {
+				outputEnvVars[k] = v
+			}
 		}
+
 	}
 
 	// If no leaf states, return base state
 	if len(leafStates) == 0 {
-		return g.BaseState, nil
+		return &BuildGraphOutput{
+			State:    g.BaseState,
+			PathList: outputPathList,
+			EnvVars:  outputEnvVars,
+		}, nil
 	}
 
 	// If only one leaf state, return it
 	if len(leafStates) == 1 {
-		return &leafStates[0], nil
+		return &BuildGraphOutput{
+			State:    &leafStates[0],
+			PathList: outputPathList,
+			EnvVars:  outputEnvVars,
+		}, nil
 	}
 
 	// Merge all leaf states
 	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(leafStepNames, ", "))
 	result := llb.Merge(leafStates, llb.WithCustomName(mergeName))
-	return &result, nil
+
+	return &BuildGraphOutput{
+		State:    &result,
+		PathList: outputPathList,
+		EnvVars:  outputEnvVars,
+	}, nil
 }
 
 func (g *BuildGraph) processNode(node *Node) error {
@@ -107,11 +128,6 @@ func (g *BuildGraph) processNode(node *Node) error {
 		if !parent.Processed {
 			// If this node is marked in-progress, we have a dependency violation
 			if node.InProgress {
-				fmt.Printf("Dependencies for %s:\n", node.Step.Name)
-				for _, dep := range node.Parents {
-					fmt.Printf("  %s (processed: %v, in-progress: %v)\n",
-						dep.Step.Name, dep.Processed, dep.InProgress)
-				}
 				return fmt.Errorf("Dependency violation: %s waiting for unprocessed parent %s",
 					node.Step.Name, parent.Step.Name)
 			}
@@ -128,12 +144,16 @@ func (g *BuildGraph) processNode(node *Node) error {
 
 	// Determine the state to build upon
 	var currentState *llb.State
+	currentEnvVars := make(map[string]string)
+	currentPathList := make([]string, 0)
 
 	if len(node.Parents) == 0 {
 		currentState = g.BaseState
 	} else if len(node.Parents) == 1 {
 		// If only one parent, use its state directly
 		currentState = node.Parents[0].State
+		currentEnvVars = node.Parents[0].OutputEnvVars
+		currentPathList = node.Parents[0].OutputPathList
 	} else {
 		// If multiple parents, merge their states
 		parentStates := make([]llb.State, len(node.Parents))
@@ -144,6 +164,13 @@ func (g *BuildGraph) processNode(node *Node) error {
 				return fmt.Errorf("Parent %s of %s has nil state",
 					parent.Step.Name, node.Step.Name)
 			}
+
+			// Build up the current path and env vars
+			currentPathList = append(currentPathList, parent.OutputPathList...)
+			for k, v := range parent.OutputEnvVars {
+				currentEnvVars[k] = v
+			}
+
 			parentStates[i] = *parent.State
 			mergeStepNames[i] = parent.Step.Name
 		}
@@ -153,8 +180,11 @@ func (g *BuildGraph) processNode(node *Node) error {
 		currentState = &merged
 	}
 
+	node.InputPathList = currentPathList
+	node.InputEnvVars = currentEnvVars
+
 	// Convert this node's step to LLB
-	stepState, err := convertStepToLLB2(node.Step, currentState)
+	stepState, err := node.convertStepToLLB(currentState)
 	if err != nil {
 		return err
 	}
@@ -163,87 +193,6 @@ func (g *BuildGraph) processNode(node *Node) error {
 	node.Processed = true
 
 	return nil
-}
-
-func convertStepToLLB2(step *plan.Step, baseState *llb.State) (*llb.State, error) {
-	state := baseState
-	for _, cmd := range step.Commands {
-		var err error
-		state, err = convertCommandToLLB(cmd, state, step)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if step.Outputs != nil && len(step.Outputs) > 0 {
-		result := llb.Scratch()
-
-		for _, output := range step.Outputs {
-			result = result.File(llb.Copy(*state, output, output, &llb.CopyInfo{
-				CreateDestPath:      true,
-				AllowWildcard:       true,
-				AllowEmptyWildcard:  true,
-				CopyDirContentsOnly: false,
-				FollowSymlinks:      true,
-			}))
-		}
-
-		merged := llb.Merge([]llb.State{*state, result})
-		state = &merged
-	}
-
-	return state, nil
-}
-
-func convertCommandToLLB(cmd plan.Command, state *llb.State, step *plan.Step) (*llb.State, error) {
-	switch cmd := cmd.(type) {
-	case plan.ExecCommand:
-		opts := []llb.RunOption{llb.Shlex(cmd.Cmd)}
-		if cmd.CustomName != "" {
-			opts = append(opts, llb.WithCustomName(cmd.CustomName))
-		}
-		s := state.Run(opts...).Root()
-		return &s, nil
-
-	case plan.PathCommand:
-		// TODO: Build up the path so we are not starting from scratch each time
-		s := state.AddEnvf("PATH", "%s:%s", cmd.Path, system.DefaultPathEnvUnix)
-		return &s, nil
-
-	case plan.VariableCommand:
-		s := state.AddEnv(cmd.Name, cmd.Value)
-		return &s, nil
-
-	case plan.CopyCommand:
-		src := llb.Local("context")
-		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
-			CopyDirContentsOnly: true,
-		}))
-		return &s, nil
-
-	case plan.FileCommand:
-		asset, ok := step.Assets[cmd.Name]
-		if !ok {
-			return state, fmt.Errorf("asset %q not found", cmd.Name)
-		}
-
-		// Create parent directories for the file
-		parentDir := filepath.Dir(cmd.Path)
-		if parentDir != "/" {
-			s := state.File(llb.Mkdir(parentDir, 0755, llb.WithParents(true)))
-			state = &s
-		}
-
-		fileAction := llb.Mkfile(cmd.Path, 0644, []byte(asset))
-		s := state.File(fileAction)
-		if cmd.CustomName != "" {
-			s = state.File(fileAction, llb.WithCustomName(cmd.CustomName))
-		}
-
-		return &s, nil
-	}
-
-	return state, nil
 }
 
 // getProcessingOrder returns nodes in topological order

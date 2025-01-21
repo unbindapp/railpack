@@ -67,7 +67,12 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	pkgManager := p.getPackageManager(ctx.App)
 
 	install := ctx.NewProviderStep("install")
+
 	install.AddCommands([]plan.Command{
+		plan.NewVariableCommand("MISE_DATA_DIR", "/mise"),
+		plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
+		plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
+		plan.NewPathCommand("/mise/shims"),
 		plan.NewCopyCommand(".", "."),
 		plan.NewExecCommand(pkgManager.InstallDeps()),
 	})

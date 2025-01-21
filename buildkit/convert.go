@@ -2,11 +2,11 @@ package buildkit
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/railwayapp/railpack-go/core/plan"
 	p "github.com/railwayapp/railpack-go/core/plan"
 )
 
@@ -34,23 +34,13 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 		return nil, nil, err
 	}
 
-	graphState, err := graph.GenerateLLB()
+	graphOutput, err := graph.GenerateLLB()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	state = *graphState
-
-	pathList := []string{}
-	for _, step := range plan.Steps {
-		for _, cmd := range step.Commands {
-			if pathCmd, ok := cmd.(p.PathCommand); ok {
-				pathList = append(pathList, pathCmd.Path)
-			}
-		}
-	}
-
-	fmt.Printf("pathList: %+v\n", pathList)
+	state = *graphOutput.State
+	imageEnv := getImageEnv(graphOutput)
 
 	image := Image{
 		Image: specs.Image{
@@ -61,9 +51,7 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 		},
 		Variant: platform.Variant,
 		Config: specs.ImageConfig{
-			Env: []string{
-				"PATH=/mise/shims:" + system.DefaultPathEnvUnix,
-			},
+			Env:        imageEnv,
 			WorkingDir: "/app",
 		},
 	}
@@ -71,16 +59,21 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 	return &state, &image, nil
 }
 
-func convertStepToLLB(step *plan.Step, baseState *llb.State) (*llb.State, error) {
-	state := baseState
+func getImageEnv(graphOutput *BuildGraphOutput) []string {
+	pathString := strings.Join(graphOutput.PathList, ":")
 
-	for _, cmd := range step.Commands {
-		var err error
-		state, err = convertCommandToLLB(cmd, state, step)
-		if err != nil {
-			return nil, err
-		}
+	var pathEnv string
+	if pathString == "" {
+		pathEnv = "PATH=" + system.DefaultPathEnvUnix
+	} else {
+		pathEnv = "PATH=" + pathString + ":" + system.DefaultPathEnvUnix
 	}
 
-	return state, nil
+	imageEnv := []string{pathEnv}
+
+	for k, v := range graphOutput.EnvVars {
+		imageEnv = append(imageEnv, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return imageEnv
 }

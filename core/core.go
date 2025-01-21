@@ -24,8 +24,6 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 		return nil, err
 	}
 
-	generate.MiseStep(ctx)
-
 	for _, provider := range providers.GetLanguageProviders() {
 		matched, err := runProvider(provider, ctx)
 		if err != nil {
