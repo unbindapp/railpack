@@ -8,7 +8,7 @@ import (
 
 // Command represents a command that can be executed
 type Command interface {
-	commandType() string
+	CommandType() string
 	MarshalJSON() ([]byte, error)
 }
 
@@ -45,11 +45,11 @@ type FileCommand struct {
 	CustomName string `json:"custom_name,omitempty"`
 }
 
-func (e ExecCommand) commandType() string     { return "exec" }
-func (g PathCommand) commandType() string     { return "globalPath" }
-func (v VariableCommand) commandType() string { return "variable" }
-func (c CopyCommand) commandType() string     { return "copy" }
-func (f FileCommand) commandType() string     { return "file" }
+func (e ExecCommand) CommandType() string     { return "exec" }
+func (g PathCommand) CommandType() string     { return "globalPath" }
+func (v VariableCommand) CommandType() string { return "variable" }
+func (c CopyCommand) CommandType() string     { return "copy" }
+func (f FileCommand) CommandType() string     { return "file" }
 
 func NewExecCommand(cmd string, customName ...string) Command {
 	exec := ExecCommand{Cmd: cmd}
