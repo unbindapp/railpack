@@ -2,9 +2,7 @@ package node
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/railwayapp/railpack-go/core/app"
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
@@ -47,11 +45,28 @@ func (p *NodeProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, err
 	}
 
-	// if err := p.build(ctx, packageJson); err != nil {
-	// 	return false, err
-	// }
+	if err := p.build(ctx, packageJson); err != nil {
+		return false, err
+	}
 
 	return true, nil
+}
+
+func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *PackageJson) error {
+	packageManager := p.getPackageManager(ctx.App)
+	_, ok := packageJson.Scripts["build"]
+	if ok {
+		build := ctx.NewProviderStep("build")
+
+		build.AddCommands([]plan.Command{
+			plan.NewCopyCommand(".", "."),
+			plan.NewExecCommand(packageManager.RunCmd("build")),
+		})
+
+		build.DependOn("install")
+	}
+
+	return nil
 }
 
 func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *PackageJson) error {
@@ -68,11 +83,7 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	pkgManager := p.getPackageManager(ctx.App)
 
 	install := ctx.NewProviderStep("install")
-
-	install.AddCommands([]plan.Command{
-		plan.NewCopyCommand(".", "."),
-		plan.NewExecCommand(pkgManager.InstallDeps(ctx.App)),
-	})
+	pkgManager.installDependencies(ctx.App, packageJson, install)
 
 	if corepack {
 		install.DependOn("setup")
@@ -107,51 +118,7 @@ func (p *NodeProvider) packages(ctx *generate.GenerateContext, packageJson *Pack
 		}
 	}
 
-	return p.managerPackages(ctx, packages, packageManager)
-}
-
-func (p *NodeProvider) managerPackages(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder, packageManager PackageManager) error {
-	// NPM
-	if packageManager == PackageManagerNpm {
-		npm := packages.Default("npm", "latest")
-
-		lockfile, err := ctx.App.ReadFile("package-lock.json")
-		if err != nil {
-			log.Warn("package-lock.json not found")
-			lockfile = ""
-		}
-
-		if strings.Contains(lockfile, "\"lockfileVersion\": 1") {
-			packages.Version(npm, "6", "package-lock.json")
-		} else if strings.Contains(lockfile, "\"lockfileVersion\": 2") {
-			packages.Version(npm, "8", "package-lock.json")
-		}
-	}
-
-	// Pnpm
-	if packageManager == PackageManagerPnpm {
-		pnpm := packages.Default("pnpm", "latest")
-
-		lockfile, err := ctx.App.ReadFile("pnpm-lock.yaml")
-		if err == nil {
-			if strings.HasPrefix(lockfile, "lockfileVersion: 5.3") {
-				packages.Version(pnpm, "6", "pnpm-lock.yaml")
-			} else if strings.HasPrefix(lockfile, "lockfileVersion: 5.4") {
-				packages.Version(pnpm, "7", "pnpm-lock.yaml")
-			} else if strings.HasPrefix(lockfile, "lockfileVersion: '6.0'") {
-				packages.Version(pnpm, "8", "pnpm-lock.yaml")
-			}
-		}
-	}
-
-	// Yarn
-	if packageManager == PackageManagerYarn1 {
-		packages.Default("yarn", "1")
-		packages.AddAptPackage("tar")
-		packages.AddAptPackage("gpg")
-	} else if packageManager == PackageManagerYarn2 {
-		packages.Default("yarn", "2")
-	}
+	packageManager.InstallPackages(ctx, packages)
 
 	return nil
 }
