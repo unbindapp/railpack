@@ -111,7 +111,7 @@ func (p PackageManager) SupportingInstallFiles(app *a.App) []string {
 }
 
 // InstallPackages installs specific versions of package managers by analyzing the users code
-func (p PackageManager) InstallPackages(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder) error {
+func (p PackageManager) InstallPackages(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder) {
 	// NPM
 	if p == PackageManagerNpm {
 		npm := packages.Default("npm", "latest")
@@ -152,6 +152,4 @@ func (p PackageManager) InstallPackages(ctx *generate.GenerateContext, packages 
 	} else if p == PackageManagerYarn2 {
 		packages.Default("yarn", "2")
 	}
-
-	return nil
 }

@@ -55,7 +55,7 @@ func (node *Node) convertStepToLLB(baseState *llb.State) (*llb.State, error) {
 		}
 	}
 
-	if step.Outputs != nil && len(step.Outputs) > 0 {
+	if len(step.Outputs) > 0 {
 		result := llb.Scratch()
 
 		for _, output := range step.Outputs {
