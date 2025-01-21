@@ -79,6 +79,7 @@ func (p PackageManager) installDependencies(app *a.App, packageJson *PackageJson
 	})
 }
 
+// SupportingInstallFiles returns a list of files that are needed to install dependencies
 func (p PackageManager) SupportingInstallFiles(app *a.App) []string {
 	patterns := []string{
 		"**/package.json",
@@ -109,6 +110,7 @@ func (p PackageManager) SupportingInstallFiles(app *a.App) []string {
 	return allFiles
 }
 
+// InstallPackages installs specific versions of package managers by analyzing the users code
 func (p PackageManager) InstallPackages(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder) error {
 	// NPM
 	if p == PackageManagerNpm {
