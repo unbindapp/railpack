@@ -69,8 +69,13 @@ func NewVariableCommand(name, value string, customName ...string) Command {
 	return variableCmd
 }
 
-func NewCopyCommand(src, dst string, customName ...string) Command {
-	copyCmd := CopyCommand{Src: src, Dst: dst}
+func NewCopyCommand(src string, dst ...string) Command {
+	dstPath := src
+	if len(dst) > 0 {
+		dstPath = dst[0]
+	}
+
+	copyCmd := CopyCommand{Src: src, Dst: dstPath}
 	return copyCmd
 }
 

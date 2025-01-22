@@ -59,7 +59,7 @@ func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *Package
 		build := ctx.NewProviderStep("build")
 
 		build.AddCommands([]plan.Command{
-			plan.NewCopyCommand(".", "."),
+			plan.NewCopyCommand("."),
 			plan.NewExecCommand(packageManager.RunCmd("build")),
 		})
 
@@ -74,9 +74,11 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	if corepack {
 		setup := ctx.NewProviderStep("corepack")
 		setup.AddCommands([]plan.Command{
-			plan.NewCopyCommand("package.json", "."),
+			plan.NewCopyCommand("package.json"),
+			plan.NewExecCommand("ls -la"),
 			plan.NewExecCommand("npm install -g corepack"),
-			plan.NewExecCommand("corepack enable && corepack prepare --activate"),
+			plan.NewExecCommand("corepack enable"),
+			plan.NewExecCommand("corepack prepare --activate"),
 		})
 	}
 
@@ -86,7 +88,7 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	pkgManager.installDependencies(ctx.App, packageJson, install)
 
 	if corepack {
-		install.DependOn("setup")
+		install.DependOn("corepack")
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package providers
 import (
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/providers/node"
+	"github.com/railwayapp/railpack-go/core/providers/python"
 )
 
 type Provider interface {
@@ -13,5 +14,6 @@ type Provider interface {
 func GetLanguageProviders() []Provider {
 	return []Provider{
 		&node.NodeProvider{},
+		&python.PythonProvider{},
 	}
 }

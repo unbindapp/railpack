@@ -27,7 +27,8 @@ type Node struct {
 
 func (node *Node) convertStepToLLB(baseState *llb.State) (*llb.State, error) {
 	step := node.Step
-	state := baseState
+	state := *baseState
+	state = state.Dir("/app")
 
 	// Add commands for input variables and path
 	for k, v := range node.InputEnvVars {
@@ -59,7 +60,7 @@ func (node *Node) convertStepToLLB(baseState *llb.State) (*llb.State, error) {
 		result := llb.Scratch()
 
 		for _, output := range step.Outputs {
-			result = result.File(llb.Copy(*state, output, output, &llb.CopyInfo{
+			result = result.File(llb.Copy(state, output, output, &llb.CopyInfo{
 				CreateDestPath:      true,
 				AllowWildcard:       true,
 				AllowEmptyWildcard:  true,
@@ -69,13 +70,13 @@ func (node *Node) convertStepToLLB(baseState *llb.State) (*llb.State, error) {
 		}
 
 		merged := llb.Merge([]llb.State{*baseState, result})
-		state = &merged
+		state = merged
 	}
 
-	return state, nil
+	return &state, nil
 }
 
-func (node *Node) convertCommandToLLB(cmd plan.Command, state *llb.State, step *plan.Step) (*llb.State, error) {
+func (node *Node) convertCommandToLLB(cmd plan.Command, state llb.State, step *plan.Step) (llb.State, error) {
 	switch cmd := cmd.(type) {
 	case plan.ExecCommand:
 		opts := []llb.RunOption{llb.Shlex(cmd.Cmd)}
@@ -83,7 +84,7 @@ func (node *Node) convertCommandToLLB(cmd plan.Command, state *llb.State, step *
 			opts = append(opts, llb.WithCustomName(cmd.CustomName))
 		}
 		s := state.Run(opts...).Root()
-		return &s, nil
+		return s, nil
 
 	case plan.PathCommand:
 		node.appendPath(cmd.Path)
@@ -92,24 +93,25 @@ func (node *Node) convertCommandToLLB(cmd plan.Command, state *llb.State, step *
 
 		s := state.AddEnvf("PATH", "%s:%s", pathString, system.DefaultPathEnvUnix)
 
-		return &s, nil
+		return s, nil
 
 	case plan.VariableCommand:
 		s := state.AddEnv(cmd.Name, cmd.Value)
 		node.OutputEnvVars[cmd.Name] = cmd.Value
 
-		return &s, nil
+		return s, nil
 
 	case plan.CopyCommand:
 		src := llb.Local("context")
-		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
+
+		s := state.File(llb.Mkdir("/app", 0755, llb.WithParents(true)))
+
+		s = state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
 			CreateDestPath:      true,
 			FollowSymlinks:      true,
-			AllowWildcard:       true,
-			AllowEmptyWildcard:  true,
-			CopyDirContentsOnly: true,
+			CopyDirContentsOnly: false,
 		}))
-		return &s, nil
+		return s, nil
 
 	case plan.FileCommand:
 		asset, ok := step.Assets[cmd.Name]
@@ -121,7 +123,7 @@ func (node *Node) convertCommandToLLB(cmd plan.Command, state *llb.State, step *
 		parentDir := filepath.Dir(cmd.Path)
 		if parentDir != "/" {
 			s := state.File(llb.Mkdir(parentDir, 0755, llb.WithParents(true)))
-			state = &s
+			state = s
 		}
 
 		fileAction := llb.Mkfile(cmd.Path, 0644, []byte(asset))
@@ -130,7 +132,7 @@ func (node *Node) convertCommandToLLB(cmd plan.Command, state *llb.State, step *
 			s = state.File(fileAction, llb.WithCustomName(cmd.CustomName))
 		}
 
-		return &s, nil
+		return s, nil
 	}
 
 	return state, nil

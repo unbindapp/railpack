@@ -33,6 +33,11 @@ var BuildCommand = &cli.Command{
 			Name:  "output",
 			Usage: "output the final filesystem to a local directory",
 		},
+		&cli.StringFlag{
+			Name:  "progress",
+			Usage: "buildkit progress output mode. Values: auto, plain, tty",
+			Value: "auto",
+		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
 		buildResult, app, err := GenerateBuildResultForCommand(cmd)
@@ -49,9 +54,10 @@ var BuildCommand = &cli.Command{
 		os.Stdout.Write([]byte("\n"))
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
-			ImageName: cmd.String("name"),
-			DumpLLB:   cmd.Bool("llb"),
-			OutputDir: cmd.String("output"),
+			ImageName:    cmd.String("name"),
+			DumpLLB:      cmd.Bool("llb"),
+			OutputDir:    cmd.String("output"),
+			ProgressMode: cmd.String("progress"),
 		})
 		if err != nil {
 			return cli.Exit(err, 1)

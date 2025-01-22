@@ -22,9 +22,10 @@ import (
 )
 
 type BuildWithBuildkitClientOptions struct {
-	ImageName string
-	DumpLLB   bool
-	OutputDir string
+	ImageName    string
+	DumpLLB      bool
+	OutputDir    string
+	ProgressMode string
 }
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
@@ -115,7 +116,14 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 			close(displayCh)
 		}()
 
-		display, err := progressui.NewDisplay(os.Stdout, progressui.AutoMode)
+		progressMode := progressui.AutoMode
+		if opts.ProgressMode == "plain" {
+			progressMode = progressui.PlainMode
+		} else if opts.ProgressMode == "tty" {
+			progressMode = progressui.TtyMode
+		}
+
+		display, err := progressui.NewDisplay(os.Stdout, progressMode)
 		if err != nil {
 			log.Error("failed to create progress display", "error", err)
 		}
