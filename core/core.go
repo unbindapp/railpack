@@ -58,6 +58,10 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 		buildPlan.AddStep(*step)
 	}
 
+	buildPlan.Start.BaseImage = ctx.Start.BaseImage
+	buildPlan.Start.Command = ctx.Start.Command
+	buildPlan.Start.Paths = ctx.Start.Paths
+
 	buildResult := &BuildResult{
 		Plan:             buildPlan,
 		ResolvedPackages: resolvedPackages,

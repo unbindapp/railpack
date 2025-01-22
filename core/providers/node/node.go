@@ -49,6 +49,8 @@ func (p *NodeProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, err
 	}
 
+	ctx.Start.Paths = append(ctx.Start.Paths, ".")
+
 	return true, nil
 }
 

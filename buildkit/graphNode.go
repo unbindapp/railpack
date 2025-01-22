@@ -103,10 +103,7 @@ func (node *Node) convertCommandToLLB(cmd plan.Command, state llb.State, step *p
 
 	case plan.CopyCommand:
 		src := llb.Local("context")
-
-		s := state.File(llb.Mkdir("/app", 0755, llb.WithParents(true)))
-
-		s = state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
+		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
 			CreateDestPath:      true,
 			FollowSymlinks:      true,
 			CopyDirContentsOnly: false,

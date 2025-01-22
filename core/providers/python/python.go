@@ -36,6 +36,8 @@ func (p *PythonProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, err
 	}
 
+	ctx.Start.Paths = append(ctx.Start.Paths, ".")
+
 	return false, nil
 }
 
