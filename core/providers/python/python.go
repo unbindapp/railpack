@@ -72,7 +72,7 @@ func (p *PythonProvider) start(ctx *generate.GenerateContext) error {
 }
 
 func (p *PythonProvider) install(ctx *generate.GenerateContext) error {
-	install := ctx.NewProviderStep("install")
+	install := ctx.NewCommandStep("install")
 	install.AddCommands([]plan.Command{
 		plan.NewPathCommand("/root/.local/bin"),
 	})

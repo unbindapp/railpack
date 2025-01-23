@@ -3,75 +3,101 @@ package plan
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommandMarshalUnmarshal(t *testing.T) {
 	tests := []struct {
-		name     string
-		command  Command
-		expected string
+		name            string
+		command         Command
+		expectedJSON    string
+		unmarshalString string
 	}{
+		// Exec
 		{
-			name:     "exec command without custom name",
-			command:  NewExecCommand("echo hello"),
-			expected: `"RUN:echo hello"`,
+			name:            "exec command without custom name",
+			command:         NewExecCommand("echo hello"),
+			expectedJSON:    `{"cmd":"echo hello"}`,
+			unmarshalString: "echo hello",
 		},
 		{
-			name:     "exec command with custom name",
-			command:  NewExecCommand("echo hello", "Say Hello"),
-			expected: `"RUN#Say Hello:echo hello"`,
+			name:            "exec command with custom name",
+			command:         NewExecCommand("echo hello", "Say Hello"),
+			expectedJSON:    `{"cmd":"echo hello","customName":"Say Hello"}`,
+			unmarshalString: "RUN#Say Hello:echo hello",
 		},
 		{
-			name:     "path command without custom name",
-			command:  NewPathCommand("/usr/local/bin"),
-			expected: `"PATH:/usr/local/bin"`,
+			name:            "exec command with cache key",
+			command:         ExecCommand{Cmd: "npm install", CacheKey: "v1"},
+			expectedJSON:    `{"cmd":"npm install","cacheKey":"v1"}`,
+			unmarshalString: "",
+		},
+
+		// Path
+		{
+			name:            "path command",
+			command:         NewPathCommand("/usr/local/bin"),
+			expectedJSON:    `{"path":"/usr/local/bin"}`,
+			unmarshalString: "PATH:/usr/local/bin",
+		},
+
+		// Variable
+		{
+			name:            "variable command",
+			command:         NewVariableCommand("KEY", "value"),
+			expectedJSON:    `{"name":"KEY","value":"value"}`,
+			unmarshalString: "ENV:KEY=value",
+		},
+
+		// Copy
+		{
+			name:            "copy command",
+			command:         NewCopyCommand("src.txt", "dst.txt"),
+			expectedJSON:    `{"src":"src.txt","dst":"dst.txt"}`,
+			unmarshalString: "COPY:src.txt dst.txt",
+		},
+
+		// File
+		{
+			name:            "file command without custom name",
+			command:         NewFileCommand("/etc/conf", "config.yaml"),
+			expectedJSON:    `{"path":"/etc/conf","name":"config.yaml"}`,
+			unmarshalString: "FILE:/etc/conf config.yaml",
 		},
 		{
-			name:     "variable command without custom name",
-			command:  NewVariableCommand("KEY", "value"),
-			expected: `"ENV:KEY=value"`,
-		},
-		{
-			name:     "copy command without custom name",
-			command:  NewCopyCommand("src.txt", "dst.txt"),
-			expected: `"COPY:src.txt dst.txt"`,
-		},
-		{
-			name:     "file command without custom name",
-			command:  NewFileCommand("/etc/conf", "config.yaml"),
-			expected: `"FILE:/etc/conf config.yaml"`,
-		},
-		{
-			name:     "file command with custom name",
-			command:  NewFileCommand("/etc/conf", "config.yaml", "Config File"),
-			expected: `"FILE#Config File:/etc/conf config.yaml"`,
+			name:            "file command with custom name",
+			command:         NewFileCommand("/etc/conf", "config.yaml", "Config File"),
+			expectedJSON:    `{"path":"/etc/conf","name":"config.yaml","customName":"Config File"}`,
+			unmarshalString: "FILE#Config File:/etc/conf config.yaml",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test marshalling
+			// Test marshalling to JSON object
 			data, err := json.Marshal(tt.command)
-			if err != nil {
-				t.Fatalf("failed to marshal command: %v", err)
-			}
-			if string(data) != tt.expected {
-				t.Errorf("marshal result\ngot:  %s\nwant: %s", string(data), tt.expected)
-			}
+			require.NoError(t, err, "failed to marshal command")
+			require.Equal(t, string(data), tt.expectedJSON, "marshal result")
 
-			// Test unmarshalling
-			cmd, err := UnmarshalCommand(data)
-			if err != nil {
-				t.Fatalf("failed to unmarshal command: %v", err)
-			}
+			// Test unmarshalling from JSON object
+			cmd, err := UnmarshalCommand([]byte(tt.expectedJSON))
+			require.NoError(t, err, "failed to unmarshal JSON command")
 
 			// Marshal again to verify it produces the same result
 			roundTrip, err := json.Marshal(cmd)
-			if err != nil {
-				t.Fatalf("failed to marshal unmarshalled command: %v", err)
-			}
-			if string(roundTrip) != tt.expected {
-				t.Errorf("round-trip result\ngot:  %s\nwant: %s", string(roundTrip), tt.expected)
+			require.NoError(t, err, "failed to marshal unmarshalled command")
+			require.Equal(t, string(roundTrip), tt.expectedJSON, "round-trip JSON result")
+
+			// Test unmarshalling from string format
+			if tt.unmarshalString != "" {
+				cmd, err = UnmarshalCommand([]byte(tt.unmarshalString))
+				require.NoError(t, err, "failed to unmarshal string command")
+
+				// Marshal to JSON to verify it produces the same object
+				roundTrip, err = json.Marshal(cmd)
+				require.NoError(t, err, "failed to marshal string-unmarshalled command")
+				require.Equal(t, string(roundTrip), tt.expectedJSON, "string unmarshal to JSON result")
 			}
 		})
 	}

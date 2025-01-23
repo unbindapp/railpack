@@ -81,7 +81,7 @@ func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *Package
 	packageManager := p.getPackageManager(ctx.App)
 	_, ok := packageJson.Scripts["build"]
 	if ok {
-		build := ctx.NewProviderStep("build")
+		build := ctx.NewCommandStep("build")
 
 		build.AddCommands([]plan.Command{
 			plan.NewCopyCommand("."),
@@ -98,7 +98,7 @@ func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *Package
 func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *PackageJson) error {
 	corepack := p.usesCorepack(packageJson)
 	if corepack {
-		setup := ctx.NewProviderStep("corepack")
+		setup := ctx.NewCommandStep("corepack")
 		setup.AddCommands([]plan.Command{
 			plan.NewCopyCommand("package.json"),
 			plan.NewExecCommand("ls -la"),
@@ -110,7 +110,7 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 
 	pkgManager := p.getPackageManager(ctx.App)
 
-	install := ctx.NewProviderStep("install")
+	install := ctx.NewCommandStep("install")
 	pkgManager.installDependencies(ctx.App, packageJson, install)
 
 	if corepack {

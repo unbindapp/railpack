@@ -9,7 +9,7 @@ type CommandStepBuilder struct {
 	Outputs     []string
 }
 
-func (c *GenerateContext) NewProviderStep(name string) *CommandStepBuilder {
+func (c *GenerateContext) NewCommandStep(name string) *CommandStepBuilder {
 	step := &CommandStepBuilder{
 		DisplayName: name,
 		DependsOn:   []string{PackagesStepName},

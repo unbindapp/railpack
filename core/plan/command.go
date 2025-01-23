@@ -9,13 +9,13 @@ import (
 // Command represents a command that can be executed
 type Command interface {
 	CommandType() string
-	MarshalJSON() ([]byte, error)
 }
 
 // ExecCommand represents a command to be executed
 type ExecCommand struct {
 	Cmd        string `json:"cmd"`
-	CustomName string `json:"custom_name,omitempty"`
+	CustomName string `json:"customName,omitempty"`
+	CacheKey   string `json:"cacheKey,omitempty"`
 }
 
 // PathCommand represents a global path addition
@@ -37,12 +37,9 @@ type CopyCommand struct {
 
 // FileCommand represents a file creation operation
 type FileCommand struct {
-	Path string `json:"path"`
-
-	// The name of the file in the build step assets
-	Name string `json:"name"`
-
-	CustomName string `json:"custom_name,omitempty"`
+	Path       string `json:"path"`
+	Name       string `json:"name"`
+	CustomName string `json:"customName,omitempty"`
 }
 
 func (e ExecCommand) CommandType() string     { return "exec" }
@@ -87,41 +84,69 @@ func NewFileCommand(path, name string, customName ...string) Command {
 	return fileCmd
 }
 
-func (e ExecCommand) MarshalJSON() ([]byte, error) {
-	prefix := "RUN"
-	if e.CustomName != "" {
-		prefix += "#" + e.CustomName
-	}
-	return json.Marshal(prefix + ":" + e.Cmd)
-}
-
-func (g PathCommand) MarshalJSON() ([]byte, error) {
-	prefix := "PATH"
-	return json.Marshal(prefix + ":" + g.Path)
-}
-
-func (v VariableCommand) MarshalJSON() ([]byte, error) {
-	prefix := "ENV"
-	return json.Marshal(prefix + ":" + v.Name + "=" + v.Value)
-}
-
-func (c CopyCommand) MarshalJSON() ([]byte, error) {
-	prefix := "COPY"
-	return json.Marshal(prefix + ":" + c.Src + " " + c.Dst)
-}
-
-func (f FileCommand) MarshalJSON() ([]byte, error) {
-	prefix := "FILE"
-	if f.CustomName != "" {
-		prefix += "#" + f.CustomName
-	}
-	return json.Marshal(prefix + ":" + f.Path + " " + f.Name)
-}
-
 func UnmarshalCommand(data []byte) (Command, error) {
-	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
+	// First try to unmarshal as JSON object
+	if cmd, err := UnmarshalJsonCommand(data); err == nil {
+		return cmd, nil
+	}
+
+	// If that fails, parse the string into a command
+	return UnmarshalStringCommand(data)
+}
+
+func UnmarshalJsonCommand(data []byte) (Command, error) {
+	// Try to unmarshal as JSON object
+	var rawMap map[string]interface{}
+	if err := json.Unmarshal(data, &rawMap); err != nil {
 		return nil, err
+	}
+
+	// Determine command type based on fields present
+	if _, ok := rawMap["cmd"]; ok {
+		var cmd ExecCommand
+		if err := json.Unmarshal(data, &cmd); err != nil {
+			return nil, err
+		}
+		return cmd, nil
+	}
+	if _, ok := rawMap["path"]; ok {
+		if _, ok := rawMap["name"]; ok {
+			var file FileCommand
+			if err := json.Unmarshal(data, &file); err != nil {
+				return nil, err
+			}
+			return file, nil
+		}
+		var path PathCommand
+		if err := json.Unmarshal(data, &path); err != nil {
+			return nil, err
+		}
+		return path, nil
+	}
+	if _, ok := rawMap["name"]; ok && rawMap["value"] != nil {
+		var env VariableCommand
+		if err := json.Unmarshal(data, &env); err != nil {
+			return nil, err
+		}
+		return env, nil
+	}
+	if _, ok := rawMap["src"]; ok {
+		var copy CopyCommand
+		if err := json.Unmarshal(data, &copy); err != nil {
+			return nil, err
+		}
+		return copy, nil
+	}
+
+	return nil, fmt.Errorf("unknown command type: %v", rawMap)
+}
+
+func UnmarshalStringCommand(data []byte) (Command, error) {
+	str := string(data)
+
+	// If no prefix, treat as exec command
+	if !strings.Contains(str, ":") {
+		return NewExecCommand(str), nil
 	}
 
 	parts := strings.SplitN(str, ":", 2)
@@ -144,19 +169,19 @@ func UnmarshalCommand(data []byte) (Command, error) {
 	case "RUN":
 		return NewExecCommand(payload, customName), nil
 	case "PATH":
-		return NewPathCommand(payload, customName), nil
+		return NewPathCommand(payload), nil
 	case "ENV":
 		envParts := strings.SplitN(payload, "=", 2)
 		if len(envParts) != 2 {
 			return nil, fmt.Errorf("invalid ENV format: %s", payload)
 		}
-		return NewVariableCommand(envParts[0], envParts[1], customName), nil
+		return NewVariableCommand(envParts[0], envParts[1]), nil
 	case "COPY":
 		copyParts := strings.Fields(payload)
 		if len(copyParts) != 2 {
 			return nil, fmt.Errorf("invalid COPY format: %s", payload)
 		}
-		return NewCopyCommand(copyParts[0], copyParts[1], customName), nil
+		return NewCopyCommand(copyParts[0], copyParts[1]), nil
 	case "FILE":
 		fileParts := strings.Fields(payload)
 		if len(fileParts) != 2 {
@@ -164,5 +189,7 @@ func UnmarshalCommand(data []byte) (Command, error) {
 		}
 		return NewFileCommand(fileParts[0], fileParts[1], customName), nil
 	}
-	return nil, fmt.Errorf("unknown command type: %s", cmdType)
+
+	// fallback to exec command type
+	return NewExecCommand(str, customName), nil
 }
