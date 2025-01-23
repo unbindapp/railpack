@@ -72,6 +72,7 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 
 func getStartState(buildState llb.State, plan *p.BuildPlan, platform specs.Platform) llb.State {
 	startState := buildState
+	startState.Dir(WorkingDir)
 
 	if plan.Start.BaseImage != "" {
 		// This is all the user code + any modifications made by the providers
@@ -96,7 +97,7 @@ func getStartState(buildState llb.State, plan *p.BuildPlan, platform specs.Platf
 		// If there is no custom start image, we will just copy over any additional files from the local context
 		src := llb.Local("context")
 		for _, path := range plan.Start.Paths {
-			startState = startState.File(llb.Copy(src, path, path, &llb.CopyInfo{
+			startState = startState.Dir(WorkingDir).File(llb.Copy(src, path, path, &llb.CopyInfo{
 				CreateDestPath:      true,
 				FollowSymlinks:      true,
 				CopyDirContentsOnly: true,

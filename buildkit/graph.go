@@ -260,9 +260,14 @@ func (g *BuildGraph) convertCommandToLLB(node *Node, cmd plan.Command, state llb
 
 		if cmd.CacheKey != "" {
 			if planCache, ok := g.Plan.Caches[cmd.CacheKey]; ok {
-				cache := g.CacheStore.GetCache(cmd.CacheKey, &planCache)
+				cache := g.CacheStore.GetCache(cmd.CacheKey, planCache)
+				cacheType := llb.CacheMountShared
+				if planCache.Type == plan.CacheTypeLocked {
+					cacheType = llb.CacheMountLocked
+				}
+
 				opts = append(opts,
-					llb.AddMount(planCache.Directory, *cache.cacheState, llb.AsPersistentCacheDir(cache.cacheKey, llb.CacheMountShared)),
+					llb.AddMount(planCache.Directory, *cache.cacheState, llb.AsPersistentCacheDir(cache.cacheKey, cacheType)),
 				)
 			} else {
 				return state, fmt.Errorf("cache with key %q not found", cmd.CacheKey)

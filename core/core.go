@@ -51,6 +51,7 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 
 	buildStepOptions := &generate.BuildStepOptions{
 		ResolvedPackages: resolvedPackages,
+		Caches:           ctx.Caches,
 	}
 
 	buildPlan.Variables = ctx.Variables

@@ -22,6 +22,7 @@ type PackageStepBuilder struct {
 	SupportingMiseFiles   []string
 	Assets                map[string]string
 	DependsOn             []string
+	Outputs               []string
 
 	app *a.App
 	env *a.Environment
@@ -35,9 +36,9 @@ func (c *GenerateContext) NewPackageStep(name string) *PackageStepBuilder {
 		SupportingAptPackages: []string{},
 		Assets:                map[string]string{},
 		DependsOn:             []string{},
-
-		app: c.App,
-		env: c.Env,
+		Outputs:               []string{"/mise/shims", "/mise/installs", "/usr/local/bin/mise", "/etc/mise/config.toml", "/root/.local/state/mise"},
+		app:                   c.App,
+		env:                   c.Env,
 	}
 
 	c.Steps = append(c.Steps, step)
@@ -70,64 +71,91 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 
 	step.DependsOn = b.DependsOn
 
-	// Install mise
-	step.AddCommands([]plan.Command{
-		plan.NewVariableCommand("MISE_DATA_DIR", "/mise"),
-		plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
-		plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
-		plan.NewPathCommand("/mise/shims"),
-		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*'", plan.ExecOptions{CustomName: "install curl"}),
-		plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'",
-			plan.ExecOptions{CustomName: "install mise"}),
-	})
+	aptCache, ok := options.Caches["apt"]
+	if !ok {
+		aptCache = plan.NewCache("/var/cache/apt")
+		aptCache.Type = plan.CacheTypeLocked
+		options.Caches["apt"] = aptCache
+	}
 
-	// Add user mise config files if they exist
-	supportingMiseConfigFiles := b.GetSupportingMiseConfigFiles(b.app.Source)
-	for _, file := range supportingMiseConfigFiles {
+	miseCache, ok := options.Caches["mise"]
+	if !ok {
+		miseCache = plan.NewCache("/mise/cache")
+		options.Caches["mise"] = miseCache
+	}
+
+	// Install mise
+	if len(b.MisePackages) > 0 {
 		step.AddCommands([]plan.Command{
-			plan.NewCopyCommand(file, "/app/"+file),
+			plan.NewVariableCommand("MISE_DATA_DIR", "/mise"),
+			plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
+			plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
+			plan.NewVariableCommand("MISE_CACHE_DIR", "/mise/cache"),
+			plan.NewPathCommand("/mise/shims"),
+			plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*'", plan.ExecOptions{
+				CustomName: "install curl",
+				CacheKey:   "apt",
+			}),
+			plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'",
+				plan.ExecOptions{
+					CustomName: "install mise",
+					CacheKey:   "mise",
+				}),
 		})
+
+		// Add user mise config files if they exist
+		supportingMiseConfigFiles := b.GetSupportingMiseConfigFiles(b.app.Source)
+		for _, file := range supportingMiseConfigFiles {
+			step.AddCommands([]plan.Command{
+				plan.NewCopyCommand(file, "/app/"+file),
+			})
+		}
 	}
 
 	// Setup apt commands
 	if len(b.SupportingAptPackages) > 0 {
 		pkgString := strings.Join(b.SupportingAptPackages, " ")
 		step.AddCommands([]plan.Command{
-			plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'",
-				plan.ExecOptions{CustomName: "install apt packages: " + pkgString}),
+			plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'", plan.ExecOptions{
+				CustomName: "install apt packages: " + pkgString,
+				CacheKey:   "apt",
+			}),
 		})
 	}
 
 	// Setup mise commands
-	packagesToInstall := make(map[string]string)
-	for _, pkg := range b.MisePackages {
-		resolved, ok := options.ResolvedPackages[pkg.Name]
-		if ok && resolved.ResolvedVersion != nil {
-			packagesToInstall[pkg.Name] = *resolved.ResolvedVersion
+	if len(b.MisePackages) > 0 {
+		packagesToInstall := make(map[string]string)
+		for _, pkg := range b.MisePackages {
+			resolved, ok := options.ResolvedPackages[pkg.Name]
+			if ok && resolved.ResolvedVersion != nil {
+				packagesToInstall[pkg.Name] = *resolved.ResolvedVersion
+			}
 		}
+
+		miseToml, err := mise.GenerateMiseToml(packagesToInstall)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate mise.toml: %w", err)
+		}
+
+		b.Assets["mise.toml"] = miseToml
+
+		pkgNames := make([]string, 0, len(packagesToInstall))
+		for k := range packagesToInstall {
+			pkgNames = append(pkgNames, k)
+		}
+
+		step.AddCommands([]plan.Command{
+			plan.NewFileCommand("/etc/mise/config.toml", "mise.toml", "create mise config"),
+			plan.NewExecCommand("sh -c 'mise trust -a && mise install'", plan.ExecOptions{
+				CustomName: "install mise packages: " + strings.Join(pkgNames, ", "),
+				CacheKey:   "mise",
+			}),
+		})
 	}
-
-	miseToml, err := mise.GenerateMiseToml(packagesToInstall)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate mise.toml: %w", err)
-	}
-
-	b.Assets["mise.toml"] = miseToml
-
-	pkgNames := make([]string, 0, len(packagesToInstall))
-	for k := range packagesToInstall {
-		pkgNames = append(pkgNames, k)
-	}
-
-	step.AddCommands([]plan.Command{
-		plan.NewFileCommand("/etc/mise/config.toml", "mise.toml", "create mise config"),
-		plan.NewExecCommand("sh -c 'mise trust -a && mise install'",
-			plan.ExecOptions{CustomName: "install mise packages: " + strings.Join(pkgNames, ", ")}),
-	})
 
 	step.Assets = b.Assets
-
-	step.Outputs = []string{"/mise/shims", "/mise/installs", "/usr/local/bin/mise", "/etc/mise/config.toml", "/root/.local/state/mise"}
+	step.Outputs = b.Outputs
 
 	return step, nil
 }

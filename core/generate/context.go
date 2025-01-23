@@ -9,6 +9,7 @@ import (
 
 type BuildStepOptions struct {
 	ResolvedPackages map[string]*resolver.ResolvedPackage
+	Caches           map[string]*plan.Cache
 }
 
 type StepBuilder interface {
@@ -21,7 +22,7 @@ type GenerateContext struct {
 	Variables map[string]string
 	Steps     []StepBuilder
 	Start     StartContext
-	Caches    map[string]plan.Cache
+	Caches    map[string]*plan.Cache
 
 	resolver *resolver.Resolver
 }
@@ -38,7 +39,7 @@ func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error
 		Variables: map[string]string{},
 		Steps:     make([]StepBuilder, 0),
 		Start:     *NewStartContext(),
-		Caches:    make(map[string]plan.Cache),
+		Caches:    make(map[string]*plan.Cache),
 		resolver:  resolver,
 	}, nil
 }
@@ -48,6 +49,6 @@ func (c *GenerateContext) ResolvePackages() (map[string]*resolver.ResolvedPackag
 }
 
 func (c *GenerateContext) AddCache(key string, directory string) string {
-	c.Caches[key] = *plan.NewCache(directory)
+	c.Caches[key] = plan.NewCache(directory)
 	return key
 }
