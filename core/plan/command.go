@@ -3,6 +3,7 @@ package plan
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -19,8 +20,8 @@ type ExecOptions struct {
 // ExecCommand represents a command to be executed
 type ExecCommand struct {
 	Cmd        string `json:"cmd"`
-	CustomName string `json:"customName,omitempty"`
 	CacheKey   string `json:"cacheKey,omitempty"`
+	CustomName string `json:"customName,omitempty"`
 }
 
 // PathCommand represents a global path addition
@@ -41,11 +42,17 @@ type CopyCommand struct {
 	Dst   string `json:"dst"`
 }
 
+type FileOptions struct {
+	Mode       os.FileMode `json:"mode,omitempty"`
+	CustomName string      `json:"customName,omitempty"`
+}
+
 // FileCommand represents a file creation operation
 type FileCommand struct {
-	Path       string `json:"path"`
-	Name       string `json:"name"`
-	CustomName string `json:"customName,omitempty"`
+	Path       string      `json:"path"`
+	Name       string      `json:"name"`
+	Mode       os.FileMode `json:"mode,omitempty"`
+	CustomName string      `json:"customName,omitempty"`
 }
 
 func (e ExecCommand) CommandType() string     { return "exec" }
@@ -83,10 +90,11 @@ func NewCopyCommand(src string, dst ...string) Command {
 	return copyCmd
 }
 
-func NewFileCommand(path, name string, customName ...string) Command {
+func NewFileCommand(path, name string, options ...FileOptions) Command {
 	fileCmd := FileCommand{Path: path, Name: name}
-	if len(customName) > 0 {
-		fileCmd.CustomName = customName[0]
+	if len(options) > 0 {
+		fileCmd.CustomName = options[0].CustomName
+		fileCmd.Mode = options[0].Mode
 	}
 	return fileCmd
 }
@@ -194,7 +202,7 @@ func UnmarshalStringCommand(data []byte) (Command, error) {
 		if len(fileParts) != 2 {
 			return nil, fmt.Errorf("invalid FILE format: %s", payload)
 		}
-		return NewFileCommand(fileParts[0], fileParts[1], customName), nil
+		return NewFileCommand(fileParts[0], fileParts[1], FileOptions{CustomName: customName}), nil
 	}
 
 	// fallback to exec command type

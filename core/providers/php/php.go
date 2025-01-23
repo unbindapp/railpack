@@ -32,33 +32,16 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, err
 	}
 
-	if err := p.install(ctx); err != nil {
-		return false, err
-	}
-
-	ctx.Start.Paths = append(ctx.Start.Paths, ".")
-
-	if err := p.start(ctx); err != nil {
-		return false, err
-	}
-
-	return false, nil
-}
-
-func (p *PhpProvider) start(ctx *generate.GenerateContext) error {
-	ctx.Start.Paths = []string{"."}
-	ctx.Start.Command = "php-fpm & nginx -c /etc/nginx/nginx.conf"
-
-	return nil
-}
-
-func (p *PhpProvider) install(ctx *generate.GenerateContext) error {
+	// Install nginx
 	nginxPackages := ctx.NewAptStep("packages:nginx")
 	nginxPackages.Packages = []string{"nginx", "git", "zip", "unzip"}
+	nginxPackages.DependsOn = []string{"packages"}
 
+	// Install composer
 	if _, err := p.readComposerJson(ctx); err == nil {
 		install := ctx.NewCommandStep("install")
 		install.AddCommands([]plan.Command{
+			// Copy composer from the composer image
 			plan.CopyCommand{Image: "composer:latest", Src: "/usr/bin/composer", Dst: "/usr/bin/composer"},
 			plan.NewCopyCommand("."),
 			plan.NewExecCommand("composer install --ignore-platform-reqs"),
@@ -67,42 +50,60 @@ func (p *PhpProvider) install(ctx *generate.GenerateContext) error {
 		install.DependsOn = []string{"packages"}
 	}
 
+	// Setup nginx
 	nginxSetup := ctx.NewCommandStep("nginx:setup")
 	nginxSetup.DependsOn = []string{"packages:nginx"}
 
 	nginxSetup.AddCommands([]plan.Command{
-		plan.NewFileCommand("/etc/nginx/nginx.conf", "nginx.conf", "create nginx config"),
+		plan.NewFileCommand("/etc/nginx/nginx.conf", "nginx.conf", plan.FileOptions{CustomName: "create nginx config"}),
+		plan.NewExecCommand("nginx -t -c /etc/nginx/nginx.conf"),
+
+		plan.NewFileCommand("/etc/php-fpm.conf", "php-fpm.conf", plan.FileOptions{CustomName: "create php-fpm config"}),
+
+		plan.NewFileCommand("/start-nginx.sh", "start-nginx.sh", plan.FileOptions{
+			CustomName: "create start nginx script",
+			Mode:       0755,
+		}),
 	})
 
-	tmpl, err := template.New("nginx.conf").Parse(nginxConf)
-	if err != nil {
-		return fmt.Errorf("failed to parse nginx.conf template: %w", err)
+	nginxSetup.Assets["start-nginx.sh"] = startNginxScriptAsset
+	if configFiles, err := getConfigFiles(ctx); err == nil {
+
+		nginxSetup.Assets["nginx.conf"] = configFiles.NginxConf
+		nginxSetup.Assets["php-fpm.conf"] = configFiles.PhpFpmConf
 	}
 
+	ctx.Start.Command = "bash /start-nginx.sh"
+	ctx.Start.Paths = []string{"."}
+
+	return false, nil
+}
+
+type ConfigFiles struct {
+	NginxConf  string
+	PhpFpmConf string
+}
+
+func getConfigFiles(ctx *generate.GenerateContext) (*ConfigFiles, error) {
 	data := map[string]interface{}{
-		"PORT":                  "80", // Default port
 		"NIXPACKS_PHP_ROOT_DIR": "/app",
 		"IS_LARAVEL":            false,
-		"nginx": map[string]string{
-			"conf": "/etc/nginx",
-		},
 	}
 
-	// Execute template
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("failed to execute nginx template: %w", err)
+	nginxConf, err := readFileOrTemplateWithDefault(ctx, "nginx.conf", "nginx.template.conf", nginxConfTemplateAsset, data)
+	if err != nil {
+		return nil, err
 	}
 
-	// Add the rendered config as an asset
-	nginxSetup.Assets["nginx.conf"] = buf.String()
+	phpFpmConf, err := readFileOrTemplateWithDefault(ctx, "php-fpm.conf", "php-fpm.template.conf", phpFpmConfTemplateAsset, data)
+	if err != nil {
+		return nil, err
+	}
 
-	fmt.Printf("Compiled nginx.conf: %s\n", buf.String())
-
-	// Set the start command to run both php-fpm and nginx
-	// ctx.Start.Command = "php-fpm & nginx -g 'daemon off;'"
-
-	return nil
+	return &ConfigFiles{
+		NginxConf:  nginxConf,
+		PhpFpmConf: phpFpmConf,
+	}, nil
 }
 
 func (p *PhpProvider) packages(ctx *generate.GenerateContext) error {
@@ -126,6 +127,43 @@ func (p *PhpProvider) packages(ctx *generate.GenerateContext) error {
 	}
 
 	return nil
+}
+
+// readFileOrTemplateWithDefault reads a file or template from the app, or fallsback to a static default
+// the template is then rendered with the data and returned
+func readFileOrTemplateWithDefault(ctx *generate.GenerateContext, filename string, templateFilename string, defaultContents string, data map[string]interface{}) (string, error) {
+	var conf string
+	var confTemplate string
+
+	// The user has a custom nginx.conf file that we should use
+	if userConf, err := ctx.App.ReadFile(filename); err == nil {
+		conf = userConf
+	}
+
+	// The user has a custom nginx.template.conf file that we should use
+	if userTemplateConf, err := ctx.App.ReadFile(templateFilename); err == nil {
+		confTemplate = userTemplateConf
+	} else {
+		// Otherwise, use the default nginx.template.conf file
+		confTemplate = defaultContents
+	}
+
+	// We need to render the nginx.conf template if the user has a custom one
+	if conf == "" && confTemplate != "" {
+		tmpl, err := template.New(filename).Parse(confTemplate)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse %s template: %w", filename, err)
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return "", fmt.Errorf("failed to execute nginx template: %w", err)
+		}
+
+		conf = buf.String()
+	}
+
+	return conf, nil
 }
 
 func getPhpImage(phpVersion string) string {

@@ -67,7 +67,7 @@ func TestCommandMarshalUnmarshal(t *testing.T) {
 		},
 		{
 			name:            "file command with custom name",
-			command:         NewFileCommand("/etc/conf", "config.yaml", "Config File"),
+			command:         NewFileCommand("/etc/conf", "config.yaml", FileOptions{CustomName: "Config File"}),
 			expectedJSON:    `{"path":"/etc/conf","name":"config.yaml","customName":"Config File"}`,
 			unmarshalString: "FILE#Config File:/etc/conf config.yaml",
 		},

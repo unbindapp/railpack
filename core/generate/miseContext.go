@@ -146,7 +146,9 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 		}
 
 		step.AddCommands([]plan.Command{
-			plan.NewFileCommand("/etc/mise/config.toml", "mise.toml", "create mise config"),
+			plan.NewFileCommand("/etc/mise/config.toml", "mise.toml", plan.FileOptions{
+				CustomName: "create mise config",
+			}),
 			plan.NewExecCommand("sh -c 'mise trust -a && mise install'", plan.ExecOptions{
 				CustomName: "install mise packages: " + strings.Join(pkgNames, ", "),
 				CacheKey:   "mise",

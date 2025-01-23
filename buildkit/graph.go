@@ -2,6 +2,7 @@ package buildkit
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -325,7 +326,12 @@ func (g *BuildGraph) convertCommandToLLB(node *Node, cmd plan.Command, state llb
 			state = s
 		}
 
-		fileAction := llb.Mkfile(cmd.Path, 0644, []byte(asset))
+		var mode os.FileMode = 0644
+		if cmd.Mode != 0 {
+			mode = cmd.Mode
+		}
+
+		fileAction := llb.Mkfile(cmd.Path, mode, []byte(asset))
 		s := state.File(fileAction)
 		if cmd.CustomName != "" {
 			s = state.File(fileAction, llb.WithCustomName(cmd.CustomName))
