@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/system"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/railwayapp/railpack-go/core/plan"
 )
 
@@ -15,6 +16,7 @@ type BuildGraph struct {
 	BaseState  *llb.State
 	CacheStore *BuildKitCacheStore
 	Plan       *plan.BuildPlan
+	Platform   *specs.Platform
 }
 
 type BuildGraphOutput struct {
@@ -23,12 +25,13 @@ type BuildGraphOutput struct {
 	EnvVars  map[string]string
 }
 
-func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State, cacheStore *BuildKitCacheStore) (*BuildGraph, error) {
+func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State, cacheStore *BuildKitCacheStore, platform *specs.Platform) (*BuildGraph, error) {
 	graph := &BuildGraph{
 		Nodes:      make(map[string]*Node),
 		BaseState:  baseState,
 		CacheStore: cacheStore,
 		Plan:       plan,
+		Platform:   platform,
 	}
 
 	// Create a node for each step
@@ -204,6 +207,10 @@ func (g *BuildGraph) convertStepToLLB(node *Node, baseState *llb.State) (*llb.St
 	state := *baseState
 	state = state.Dir("/app")
 
+	if step.StartingImage != "" {
+		state = llb.Image(step.StartingImage, llb.Platform(*g.Platform))
+	}
+
 	// Add commands for input variables and path
 	for k, v := range node.InputEnvVars {
 		newState, err := g.convertCommandToLLB(node, plan.VariableCommand{Name: k, Value: v}, state, step)
@@ -294,6 +301,10 @@ func (g *BuildGraph) convertCommandToLLB(node *Node, cmd plan.Command, state llb
 
 	case plan.CopyCommand:
 		src := llb.Local("context")
+		if cmd.Image != "" {
+			src = llb.Image(cmd.Image, llb.Platform(*g.Platform))
+		}
+
 		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
 			CreateDestPath:      true,
 			FollowSymlinks:      true,

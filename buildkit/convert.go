@@ -31,7 +31,7 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 
 	cacheStore := NewBuildKitCacheStore(opts.CacheKey)
 
-	graph, err := NewBuildGraph(plan, &state, cacheStore)
+	graph, err := NewBuildGraph(plan, &state, cacheStore, &platform)
 	if err != nil {
 		return nil, nil, err
 	}

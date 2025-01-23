@@ -36,8 +36,9 @@ type VariableCommand struct {
 
 // CopyCommand represents a file copy operation
 type CopyCommand struct {
-	Src string `json:"src"`
-	Dst string `json:"dst"`
+	Image string `json:"image"`
+	Src   string `json:"src"`
+	Dst   string `json:"dst"`
 }
 
 // FileCommand represents a file creation operation

@@ -7,6 +7,7 @@ type CommandStepBuilder struct {
 	DependsOn   []string
 	Commands    []plan.Command
 	Outputs     []string
+	Assets      map[string]string
 }
 
 func (c *GenerateContext) NewCommandStep(name string) *CommandStepBuilder {
@@ -15,6 +16,7 @@ func (c *GenerateContext) NewCommandStep(name string) *CommandStepBuilder {
 		DependsOn:   []string{PackagesStepName},
 		Commands:    []plan.Command{},
 		Outputs:     []string{},
+		Assets:      map[string]string{},
 	}
 
 	c.Steps = append(c.Steps, step)
@@ -40,6 +42,7 @@ func (b *CommandStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 	step.DependsOn = b.DependsOn
 	step.Commands = b.Commands
 	step.Outputs = b.Outputs
+	step.Assets = b.Assets
 
 	return step, nil
 }
