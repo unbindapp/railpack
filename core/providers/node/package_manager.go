@@ -57,6 +57,13 @@ func (p PackageManager) RunCmd(cmd string) string {
 	return fmt.Sprintf("%s run %s", p.Name(), cmd)
 }
 
+func (p PackageManager) RunScriptCommand(cmd string) string {
+	if p == PackageManagerBun {
+		return "bun " + cmd
+	}
+	return "node " + cmd
+}
+
 func (p PackageManager) installDependencies(app *a.App, packageJson *PackageJson, install *generate.CommandStepBuilder) {
 	hasPostInstall := packageJson.Scripts != nil && packageJson.Scripts["postinstall"] != ""
 
