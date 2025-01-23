@@ -109,6 +109,7 @@ func FormatBuildResult(br *BuildResult) string {
 		output.WriteString(sectionHeaderStyle.Render("Steps"))
 		output.WriteString("\n")
 
+		stepCount := 0
 		for _, step := range br.Plan.Steps {
 			if step.Name != "packages" && step.Commands != nil { // Skip the packages step
 				hasExecCommands := false
@@ -122,20 +123,33 @@ func FormatBuildResult(br *BuildResult) string {
 				}
 
 				if hasExecCommands {
-					output.WriteString(stepHeaderStyle.Render(fmt.Sprintf("▸ %s", step.Name)))
+					customStepHeaderStyle := stepHeaderStyle
+					if stepCount > 0 {
+						customStepHeaderStyle = customStepHeaderStyle.MarginTop(1)
+					}
+
+					output.WriteString(customStepHeaderStyle.Render(fmt.Sprintf("▸ %s", step.Name)))
 					output.WriteString("\n")
 
 					for _, cmd := range execCommands {
 						output.WriteString(fmt.Sprintf("%s %s", commandPrefixStyle.Render("$"), commandStyle.Render(cmd)))
 						output.WriteString("\n")
 					}
-					output.WriteString("\n")
 				}
+
+				stepCount++
 			}
+
 		}
 	}
 
-	output.WriteString("\n")
+	if br.Plan.Start.Command != "" {
+		output.WriteString(sectionHeaderStyle.MarginTop(1).Render("Start"))
+		output.WriteString("\n")
+		output.WriteString(fmt.Sprintf("%s %s", commandPrefixStyle.Render("$"), commandStyle.Render(br.Plan.Start.Command)))
+	}
+
+	output.WriteString("\n\n")
 	return output.String()
 }
 
