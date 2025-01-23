@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/log"
+	"github.com/railwayapp/railpack-go/core"
 	"github.com/urfave/cli/v3"
 )
 
@@ -28,8 +29,8 @@ var PlanCommand = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:  "format",
-			Usage: "output format. one of: json",
-			Value: "json",
+			Usage: "output format. one of: pretty, json",
+			Value: "pretty",
 		},
 	},
 	Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -38,15 +39,23 @@ var PlanCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		serializedPlan, err := json.MarshalIndent(buildResult.Plan, "", "  ")
-		if err != nil {
-			return cli.Exit(err, 1)
+		format := cmd.String("format")
+
+		var buildResultString string
+		if format == "pretty" {
+			buildResultString = core.FormatBuildResult(buildResult)
+		} else {
+			serializedPlan, err := json.MarshalIndent(buildResult.Plan, "", "  ")
+			if err != nil {
+				return cli.Exit(err, 1)
+			}
+			buildResultString = string(serializedPlan)
 		}
 
 		output := cmd.String("out")
 		if output == "" {
 			// Write to stdout if no output file specified
-			os.Stdout.Write(serializedPlan)
+			os.Stdout.Write([]byte(buildResultString))
 			os.Stdout.Write([]byte("\n"))
 			return nil
 		} else {
@@ -54,7 +63,7 @@ var PlanCommand = &cli.Command{
 				return cli.Exit(err, 1)
 			}
 
-			err = os.WriteFile(output, serializedPlan, 0644)
+			err = os.WriteFile(output, []byte(buildResultString), 0644)
 			if err != nil {
 				return cli.Exit(err, 1)
 			}

@@ -48,8 +48,6 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, err
 		}
 	}
 
-	graph.PrintGraph()
-
 	return graph, nil
 }
 
