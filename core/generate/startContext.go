@@ -6,6 +6,6 @@ type StartContext struct {
 	Paths     []string
 }
 
-func NewStartContext() StartContext {
-	return StartContext{}
+func NewStartContext() *StartContext {
+	return &StartContext{}
 }

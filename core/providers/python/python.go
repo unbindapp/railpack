@@ -5,10 +5,12 @@ import (
 
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
+	"github.com/stretchr/objx"
 )
 
 const (
 	DEFAULT_PYTHON_VERSION = "3.13"
+	UV_CACHE_DIR           = "/opt/uv-cache"
 )
 
 type PythonProvider struct{}
@@ -36,13 +38,44 @@ func (p *PythonProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, err
 	}
 
-	ctx.Start.Paths = append(ctx.Start.Paths, ".")
+	if err := p.start(ctx); err != nil {
+		return false, err
+	}
 
 	return false, nil
 }
 
+func (p *PythonProvider) start(ctx *generate.GenerateContext) error {
+	ctx.Start.Paths = append(ctx.Start.Paths, ".")
+
+	var startCommand string
+
+	if ctx.App.HasMatch("main.py") {
+		startCommand = "python main.py"
+	}
+
+	pyproject := map[string]interface{}{}
+	if err := ctx.App.ReadTOML("pyproject.toml", &pyproject); err == nil {
+		proj := objx.New(pyproject)
+
+		name := proj.Get("project.name")
+		if name.IsStr() {
+			startCommand = "python -m " + name.Str()
+		}
+	}
+
+	if startCommand != "" {
+		ctx.Start.Command = startCommand
+	}
+
+	return nil
+}
+
 func (p *PythonProvider) install(ctx *generate.GenerateContext) error {
 	install := ctx.NewProviderStep("install")
+	install.AddCommands([]plan.Command{
+		plan.NewPathCommand("/root/.local/bin"),
+	})
 
 	hasRequirements := p.hasRequirements(ctx)
 	hasPyproject := p.hasPyproject(ctx)
@@ -58,21 +91,31 @@ func (p *PythonProvider) install(ctx *generate.GenerateContext) error {
 		})
 	} else if hasPyproject && hasPoetry {
 		install.AddCommands([]plan.Command{
+			plan.NewExecCommand("pipx install poetry"),
+			plan.NewExecCommand("poetry config virtualenvs.create false"),
 			plan.NewCopyCommand("pyproject.toml"),
 			plan.NewCopyCommand("poetry.lock"),
-			plan.NewExecCommand("poetry install --no-dev --no-interaction --no-ansi"),
+			plan.NewExecCommand("poetry install --no-interaction --no-ansi --no-root"),
 		})
 	} else if hasPyproject && hasPdm {
 		install.AddCommands([]plan.Command{
+			plan.NewExecCommand("pipx install pdm"),
 			plan.NewCopyCommand("pyproject.toml"),
 			plan.NewCopyCommand("pdm.lock"),
 			plan.NewExecCommand("pdm install --prod"),
 		})
 	} else if hasPyproject && hasUv {
 		install.AddCommands([]plan.Command{
+			plan.NewVariableCommand("UV_COMPILE_BYTECODE", "1"),
+			plan.NewVariableCommand("UV_LINK_MODE", "copy"),
+			plan.NewVariableCommand("UV_CACHE_DIR", UV_CACHE_DIR),
+			plan.NewExecCommand("pipx install uv"),
 			plan.NewCopyCommand("pyproject.toml"),
 			plan.NewCopyCommand("uv.lock"),
-			plan.NewExecCommand("uv sync --no-dev --frozen"),
+			plan.NewExecCommand("uv sync --frozen --no-install-project --no-install-workspace --no-dev"),
+			plan.NewCopyCommand("."),
+			plan.NewExecCommand("uv sync --frozen --no-dev"),
+			plan.NewPathCommand("/app/.venv/bin"),
 		})
 	} else if hasPipfile {
 		install.AddCommands([]plan.Command{
@@ -116,16 +159,8 @@ func (p *PythonProvider) packages(ctx *generate.GenerateContext) error {
 		packages.Version(python, pipfileVersion, "Pipfile")
 	}
 
-	if p.hasPoetry(ctx) {
-		packages.Default("poetry", "latest")
-	}
-
-	if p.hasUv(ctx) {
-		packages.Default("uv", "latest")
-	}
-
-	if p.hasPdm(ctx) {
-		packages.Default("pdm", "latest")
+	if p.hasPoetry(ctx) || p.hasUv(ctx) || p.hasPdm(ctx) {
+		packages.Default("pipx", "latest")
 	}
 
 	return nil

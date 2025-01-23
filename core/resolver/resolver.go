@@ -1,6 +1,8 @@
 package resolver
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/log"
 	"github.com/railwayapp/railpack-go/core/mise"
 )
@@ -62,6 +64,7 @@ func (r *Resolver) ResolvePackages() (map[string]*ResolvedPackage, error) {
 
 	for name, pkg := range r.packages {
 		latestVersion, err := r.mise.GetLatestVersion(name, pkg.Version)
+
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +95,7 @@ func (r *Resolver) Default(name, defaultVersion string) PackageRef {
 
 func (r *Resolver) Version(ref PackageRef, version, source string) PackageRef {
 	if pkg, exists := r.packages[ref.Name]; exists {
-		pkg.SetVersion(version, source)
+		pkg.SetVersion(strings.TrimSpace(version), source)
 	}
 	return ref
 }

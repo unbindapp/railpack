@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/bmatcuk/doublestar/v4"
 	"gopkg.in/yaml.v2"
 )
@@ -130,6 +131,16 @@ func (a *App) ReadYAML(name string, v interface{}) error {
 	}
 
 	return nil
+}
+
+// ReadTOML reads and parses a TOML file
+func (a *App) ReadTOML(name string, v interface{}) error {
+	data, err := a.ReadFile(name)
+	if err != nil {
+		return err
+	}
+
+	return toml.Unmarshal([]byte(data), v)
 }
 
 // IsFileExecutable checks if a path is an executable file

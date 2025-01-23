@@ -76,7 +76,7 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 		plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
 		plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
 		plan.NewPathCommand("/mise/shims"),
-		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*'", "install curl"),
+		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*'", "install curl"),
 		plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'", "install mise"),
 	})
 

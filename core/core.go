@@ -8,6 +8,7 @@ import (
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
 	"github.com/railwayapp/railpack-go/core/providers"
+	"github.com/railwayapp/railpack-go/core/providers/procfile"
 	"github.com/railwayapp/railpack-go/core/resolver"
 )
 
@@ -34,6 +35,11 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 			log.Debugf("Provider `%s` matched", provider.Name())
 			break
 		}
+	}
+
+	procfileProvider := &procfile.ProcfileProvider{}
+	if _, err := procfileProvider.Plan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to run procfile provider: %w", err)
 	}
 
 	resolvedPackages, err := ctx.ResolvePackages()

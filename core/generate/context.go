@@ -36,7 +36,7 @@ func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error
 		Env:       env,
 		Variables: map[string]string{},
 		Steps:     make([]StepBuilder, 0),
-		Start:     NewStartContext(),
+		Start:     *NewStartContext(),
 		resolver:  resolver,
 	}, nil
 }
