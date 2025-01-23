@@ -45,10 +45,11 @@ func (p PackageManager) RunScriptCommand(cmd string) string {
 
 func (p PackageManager) installDependencies(ctx *generate.GenerateContext, packageJson *PackageJson, install *generate.CommandStepBuilder) {
 	hasPostInstall := packageJson.Scripts != nil && packageJson.Scripts["postinstall"] != ""
+	hasPrepare := packageJson.Scripts != nil && packageJson.Scripts["prepare"] != ""
 
 	// If there is a postinstall script, we need the entire app to be copied
 	// This is to handle things like patch-package
-	if hasPostInstall {
+	if hasPostInstall || hasPrepare {
 		install.AddCommands([]plan.Command{
 			plan.NewCopyCommand(".", "."),
 		})
