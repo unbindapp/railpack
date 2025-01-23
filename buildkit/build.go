@@ -183,16 +183,16 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	startTime := time.Now()
 	_, err = c.Solve(ctx, def, solveOpts, ch)
 
-	if err != nil {
-		return fmt.Errorf("failed to solve: %w", err)
-	}
+	// Wait for progress monitoring to complete
+	<-progressDone
 
 	if pipeW != nil {
 		pipeW.Close()
 	}
 
-	// Wait for progress monitoring to complete
-	<-progressDone
+	if err != nil {
+		return fmt.Errorf("failed to solve: %w", err)
+	}
 
 	// Only wait for docker load if we used it
 	if opts.OutputDir == "" {

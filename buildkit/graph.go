@@ -2,15 +2,19 @@ package buildkit
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/util/system"
 	"github.com/railwayapp/railpack-go/core/plan"
 )
 
 type BuildGraph struct {
-	Nodes     map[string]*Node
-	BaseState *llb.State
+	Nodes      map[string]*Node
+	BaseState  *llb.State
+	CacheStore *BuildKitCacheStore
+	Plan       *plan.BuildPlan
 }
 
 type BuildGraphOutput struct {
@@ -19,10 +23,12 @@ type BuildGraphOutput struct {
 	EnvVars  map[string]string
 }
 
-func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State) (*BuildGraph, error) {
+func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State, cacheStore *BuildKitCacheStore) (*BuildGraph, error) {
 	graph := &BuildGraph{
-		Nodes:     make(map[string]*Node),
-		BaseState: baseState,
+		Nodes:      make(map[string]*Node),
+		BaseState:  baseState,
+		CacheStore: cacheStore,
+		Plan:       plan,
 	}
 
 	// Create a node for each step
@@ -182,7 +188,7 @@ func (g *BuildGraph) processNode(node *Node) error {
 	node.InputEnvVars = currentEnvVars
 
 	// Convert this node's step to LLB
-	stepState, err := node.convertStepToLLB(currentState)
+	stepState, err := g.convertStepToLLB(node, currentState)
 	if err != nil {
 		return err
 	}
@@ -191,6 +197,128 @@ func (g *BuildGraph) processNode(node *Node) error {
 	node.Processed = true
 
 	return nil
+}
+
+func (g *BuildGraph) convertStepToLLB(node *Node, baseState *llb.State) (*llb.State, error) {
+	step := node.Step
+	state := *baseState
+	state = state.Dir("/app")
+
+	// Add commands for input variables and path
+	for k, v := range node.InputEnvVars {
+		newState, err := g.convertCommandToLLB(node, plan.VariableCommand{Name: k, Value: v}, state, step)
+		if err != nil {
+			return nil, err
+		}
+		state = newState
+	}
+
+	for _, path := range node.InputPathList {
+		newState, err := g.convertCommandToLLB(node, plan.PathCommand{Path: path}, state, step)
+		if err != nil {
+			return nil, err
+		}
+		state = newState
+	}
+
+	// Process the step commands
+	for _, cmd := range step.Commands {
+		var err error
+		state, err = g.convertCommandToLLB(node, cmd, state, step)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(step.Outputs) > 0 {
+		result := llb.Scratch()
+
+		for _, output := range step.Outputs {
+			result = result.File(llb.Copy(state, output, output, &llb.CopyInfo{
+				CreateDestPath:      true,
+				AllowWildcard:       true,
+				AllowEmptyWildcard:  true,
+				CopyDirContentsOnly: false,
+				FollowSymlinks:      true,
+			}))
+		}
+
+		merged := llb.Merge([]llb.State{*baseState, result})
+		state = merged
+	}
+
+	return &state, nil
+}
+
+func (g *BuildGraph) convertCommandToLLB(node *Node, cmd plan.Command, state llb.State, step *plan.Step) (llb.State, error) {
+	switch cmd := cmd.(type) {
+	case plan.ExecCommand:
+		opts := []llb.RunOption{llb.Shlex(cmd.Cmd)}
+		if cmd.CustomName != "" {
+			opts = append(opts, llb.WithCustomName(cmd.CustomName))
+		}
+
+		if cmd.CacheKey != "" {
+			if planCache, ok := g.Plan.Caches[cmd.CacheKey]; ok {
+				cache := g.CacheStore.GetCache(cmd.CacheKey, &planCache)
+				opts = append(opts,
+					llb.AddMount(planCache.Directory, *cache.cacheState, llb.AsPersistentCacheDir(cache.cacheKey, llb.CacheMountShared)),
+				)
+			} else {
+				return state, fmt.Errorf("cache with key %q not found", cmd.CacheKey)
+			}
+		}
+
+		s := state.Run(opts...).Root()
+		return s, nil
+
+	case plan.PathCommand:
+		node.appendPath(cmd.Path)
+		pathList := node.getPathList()
+		pathString := strings.Join(pathList, ":")
+
+		s := state.AddEnvf("PATH", "%s:%s", pathString, system.DefaultPathEnvUnix)
+
+		return s, nil
+
+	case plan.VariableCommand:
+		s := state.AddEnv(cmd.Name, cmd.Value)
+		node.OutputEnvVars[cmd.Name] = cmd.Value
+
+		return s, nil
+
+	case plan.CopyCommand:
+		src := llb.Local("context")
+		s := state.File(llb.Copy(src, cmd.Src, cmd.Dst, &llb.CopyInfo{
+			CreateDestPath:      true,
+			FollowSymlinks:      true,
+			CopyDirContentsOnly: false,
+		}))
+		return s, nil
+
+	case plan.FileCommand:
+		asset, ok := step.Assets[cmd.Name]
+		if !ok {
+			return state, fmt.Errorf("asset %q not found", cmd.Name)
+		}
+
+		// Create parent directories for the file
+		parentDir := filepath.Dir(cmd.Path)
+		if parentDir != "/" {
+			s := state.File(llb.Mkdir(parentDir, 0755, llb.WithParents(true)))
+			state = s
+		}
+
+		fileAction := llb.Mkfile(cmd.Path, 0644, []byte(asset))
+		s := state.File(fileAction)
+		if cmd.CustomName != "" {
+			s = state.File(fileAction, llb.WithCustomName(cmd.CustomName))
+		}
+
+		return s, nil
+	}
+
+	return state, nil
 }
 
 // getProcessingOrder returns nodes in topological order

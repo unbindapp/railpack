@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/railwayapp/railpack-go/buildkit"
 	"github.com/railwayapp/railpack-go/core"
@@ -45,6 +47,13 @@ var BuildCommand = &cli.Command{
 		}
 
 		core.PrettyPrintBuildResult(buildResult)
+
+		serializedPlan, err := json.MarshalIndent(buildResult.Plan, "", "  ")
+		if err != nil {
+			return cli.Exit(err, 1)
+		}
+
+		fmt.Println(string(serializedPlan))
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
 			ImageName:    cmd.String("name"),

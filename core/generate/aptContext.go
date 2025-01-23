@@ -38,7 +38,8 @@ func (b *AptStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error) {
 
 	pkgString := strings.Join(b.Packages, " ")
 	step.AddCommands([]plan.Command{
-		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'", "install apt packages: "+pkgString),
+		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'",
+			plan.ExecOptions{CustomName: "install apt packages: " + pkgString}),
 	})
 
 	return step, nil

@@ -32,27 +32,6 @@ func (p PackageManager) Name() string {
 	}
 }
 
-func (p PackageManager) InstallDeps(app *a.App) string {
-	switch p {
-	case PackageManagerNpm:
-		hasLockfile := app.HasMatch("package-lock.json")
-		if hasLockfile {
-			return "npm ci"
-		}
-		return "npm install"
-	case PackageManagerPnpm:
-		return "pnpm install --frozen-lockfile"
-	case PackageManagerBun:
-		return "bun i --no-save"
-	case PackageManagerYarn1:
-		return "yarn install --frozen-lockfile"
-	case PackageManagerYarn2:
-		return "yarn install --check-cache"
-	default:
-		return ""
-	}
-}
-
 func (p PackageManager) RunCmd(cmd string) string {
 	return fmt.Sprintf("%s run %s", p.Name(), cmd)
 }
@@ -64,7 +43,7 @@ func (p PackageManager) RunScriptCommand(cmd string) string {
 	return "node " + cmd
 }
 
-func (p PackageManager) installDependencies(app *a.App, packageJson *PackageJson, install *generate.CommandStepBuilder) {
+func (p PackageManager) installDependencies(ctx *generate.GenerateContext, packageJson *PackageJson, install *generate.CommandStepBuilder) {
 	hasPostInstall := packageJson.Scripts != nil && packageJson.Scripts["postinstall"] != ""
 
 	// If there is a postinstall script, we need the entire app to be copied
@@ -74,16 +53,44 @@ func (p PackageManager) installDependencies(app *a.App, packageJson *PackageJson
 			plan.NewCopyCommand(".", "."),
 		})
 	} else {
-		for _, file := range p.SupportingInstallFiles(app) {
+		for _, file := range p.SupportingInstallFiles(ctx.App) {
 			install.AddCommands([]plan.Command{
 				plan.NewCopyCommand(file, file),
 			})
 		}
 	}
 
-	install.AddCommands([]plan.Command{
-		plan.NewExecCommand(p.InstallDeps(app)),
-	})
+	p.InstallDeps(ctx, install)
+}
+
+func (p PackageManager) InstallDeps(ctx *generate.GenerateContext, install *generate.CommandStepBuilder) {
+	switch p {
+	case PackageManagerNpm:
+		hasLockfile := ctx.App.HasMatch("package-lock.json")
+		npmCache := ctx.AddCache("npm-install", "/root/.npm")
+		if hasLockfile {
+			install.AddCommand(plan.NewExecCommand("npm ci", plan.ExecOptions{CacheKey: npmCache}))
+		} else {
+			install.AddCommand(plan.NewExecCommand("npm install",
+				plan.ExecOptions{CacheKey: npmCache}))
+		}
+	case PackageManagerPnpm:
+		install.AddCommand(plan.NewExecCommand("pnpm install --frozen-lockfile", plan.ExecOptions{
+			CacheKey: ctx.AddCache("pnpm-install", "/root/.local/share/pnpm/store/v3"),
+		}))
+	case PackageManagerBun:
+		install.AddCommand(plan.NewExecCommand("bun i --no-save", plan.ExecOptions{
+			CacheKey: ctx.AddCache("bun-install", "/root/.bun/install/cache"),
+		}))
+	case PackageManagerYarn1:
+		install.AddCommand(plan.NewExecCommand("yarn install --frozen-lockfile", plan.ExecOptions{
+			CacheKey: ctx.AddCache("yarn-install", "/usr/local/share/.cache/yarn"),
+		}))
+	case PackageManagerYarn2:
+		install.AddCommand(plan.NewExecCommand("yarn install --check-cache", plan.ExecOptions{
+			CacheKey: ctx.AddCache("yarn-install", "/usr/local/share/.cache/yarn"),
+		}))
+	}
 }
 
 // SupportingInstallFiles returns a list of files that are needed to install dependencies

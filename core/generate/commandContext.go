@@ -26,6 +26,10 @@ func (b *CommandStepBuilder) DependOn(name string) {
 	b.DependsOn = append(b.DependsOn, name)
 }
 
+func (b *CommandStepBuilder) AddCommand(command plan.Command) {
+	b.Commands = append(b.Commands, command)
+}
+
 func (b *CommandStepBuilder) AddCommands(commands []plan.Command) {
 	b.Commands = append(b.Commands, commands...)
 }

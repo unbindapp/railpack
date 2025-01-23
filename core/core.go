@@ -64,6 +64,8 @@ func GenerateBuildPlan(app *app.App, env *app.Environment, options *GenerateBuil
 		buildPlan.AddStep(*step)
 	}
 
+	buildPlan.Caches = ctx.Caches
+
 	buildPlan.Start.BaseImage = ctx.Start.BaseImage
 	buildPlan.Start.Command = ctx.Start.Command
 	buildPlan.Start.Paths = ctx.Start.Paths

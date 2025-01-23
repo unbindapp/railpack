@@ -4,6 +4,7 @@ type BuildPlan struct {
 	Variables map[string]string `json:"variables,omitempty"`
 	Steps     []Step            `json:"steps,omitempty"`
 	Start     Start             `json:"start,omitempty"`
+	Caches    map[string]Cache  `json:"caches,omitempty"`
 }
 
 type Start struct {

@@ -12,6 +12,7 @@ import (
 
 type ConvertPlanOptions struct {
 	BuildPlatform BuildPlatform
+	CacheKey      string
 }
 
 const (
@@ -28,7 +29,9 @@ func ConvertPlanToLLB(plan *p.BuildPlan, opts ConvertPlanOptions) (*llb.State, *
 		state = state.AddEnv(name, value)
 	}
 
-	graph, err := NewBuildGraph(plan, &state)
+	cacheStore := NewBuildKitCacheStore(opts.CacheKey)
+
+	graph, err := NewBuildGraph(plan, &state, cacheStore)
 	if err != nil {
 		return nil, nil, err
 	}

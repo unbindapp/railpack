@@ -76,8 +76,9 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 		plan.NewVariableCommand("MISE_CONFIG_DIR", "/mise"),
 		plan.NewVariableCommand("MISE_INSTALL_PATH", "/usr/local/bin/mise"),
 		plan.NewPathCommand("/mise/shims"),
-		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*'", "install curl"),
-		plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'", "install mise"),
+		plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*'", plan.ExecOptions{CustomName: "install curl"}),
+		plan.NewExecCommand("sh -c 'curl -fsSL https://mise.run | sh'",
+			plan.ExecOptions{CustomName: "install mise"}),
 	})
 
 	// Add user mise config files if they exist
@@ -92,7 +93,8 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 	if len(b.SupportingAptPackages) > 0 {
 		pkgString := strings.Join(b.SupportingAptPackages, " ")
 		step.AddCommands([]plan.Command{
-			plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'", "install apt packages: "+pkgString),
+			plan.NewExecCommand("sh -c 'apt-get update && apt-get install -y "+pkgString+" && rm -rf /var/lib/apt/lists/*'",
+				plan.ExecOptions{CustomName: "install apt packages: " + pkgString}),
 		})
 	}
 
@@ -119,7 +121,8 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 
 	step.AddCommands([]plan.Command{
 		plan.NewFileCommand("/etc/mise/config.toml", "mise.toml", "create mise config"),
-		plan.NewExecCommand("sh -c 'mise trust -a && mise install'", "install mise packages: "+strings.Join(pkgNames, ", ")),
+		plan.NewExecCommand("sh -c 'mise trust -a && mise install'",
+			plan.ExecOptions{CustomName: "install mise packages: " + strings.Join(pkgNames, ", ")}),
 	})
 
 	step.Assets = b.Assets

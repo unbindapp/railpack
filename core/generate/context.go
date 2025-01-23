@@ -21,6 +21,7 @@ type GenerateContext struct {
 	Variables map[string]string
 	Steps     []StepBuilder
 	Start     StartContext
+	Caches    map[string]plan.Cache
 
 	resolver *resolver.Resolver
 }
@@ -37,10 +38,16 @@ func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error
 		Variables: map[string]string{},
 		Steps:     make([]StepBuilder, 0),
 		Start:     *NewStartContext(),
+		Caches:    make(map[string]plan.Cache),
 		resolver:  resolver,
 	}, nil
 }
 
 func (c *GenerateContext) ResolvePackages() (map[string]*resolver.ResolvedPackage, error) {
 	return c.resolver.ResolvePackages()
+}
+
+func (c *GenerateContext) AddCache(key string, directory string) string {
+	c.Caches[key] = *plan.NewCache(directory)
+	return key
 }

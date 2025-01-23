@@ -111,10 +111,10 @@ func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *Packa
 	pkgManager := p.getPackageManager(ctx.App)
 
 	install := ctx.NewCommandStep("install")
-	pkgManager.installDependencies(ctx.App, packageJson, install)
+	pkgManager.installDependencies(ctx, packageJson, install)
 
 	if corepack {
-		install.DependOn("corepack")
+		install.DependsOn = []string{"corepack"}
 	}
 
 	return nil

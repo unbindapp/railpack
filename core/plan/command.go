@@ -11,6 +11,11 @@ type Command interface {
 	CommandType() string
 }
 
+type ExecOptions struct {
+	CacheKey   string
+	CustomName string
+}
+
 // ExecCommand represents a command to be executed
 type ExecCommand struct {
 	Cmd        string `json:"cmd"`
@@ -48,10 +53,11 @@ func (v VariableCommand) CommandType() string { return "variable" }
 func (c CopyCommand) CommandType() string     { return "copy" }
 func (f FileCommand) CommandType() string     { return "file" }
 
-func NewExecCommand(cmd string, customName ...string) Command {
+func NewExecCommand(cmd string, options ...ExecOptions) Command {
 	exec := ExecCommand{Cmd: cmd}
-	if len(customName) > 0 {
-		exec.CustomName = customName[0]
+	if len(options) > 0 {
+		exec.CustomName = options[0].CustomName
+		exec.CacheKey = options[0].CacheKey
 	}
 	return exec
 }
@@ -167,7 +173,7 @@ func UnmarshalStringCommand(data []byte) (Command, error) {
 
 	switch cmdType {
 	case "RUN":
-		return NewExecCommand(payload, customName), nil
+		return NewExecCommand(payload, ExecOptions{CustomName: customName}), nil
 	case "PATH":
 		return NewPathCommand(payload), nil
 	case "ENV":
@@ -191,5 +197,5 @@ func UnmarshalStringCommand(data []byte) (Command, error) {
 	}
 
 	// fallback to exec command type
-	return NewExecCommand(str, customName), nil
+	return NewExecCommand(str, ExecOptions{CustomName: customName}), nil
 }
