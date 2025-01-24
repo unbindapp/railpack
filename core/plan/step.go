@@ -5,7 +5,7 @@ import "encoding/json"
 type Step struct {
 	Name string `json:"name"`
 
-	DependsOn []string          `json:"depends_on,omitempty"`
+	DependsOn []string          `json:"dependsOn,omitempty"`
 	Commands  []Command         `json:"commands,omitempty"`
 	Outputs   []string          `json:"outputs,omitempty"`
 	Assets    map[string]string `json:"assets,omitempty"`
@@ -13,7 +13,7 @@ type Step struct {
 	// The base image that will be used for this step
 	// If empty (default), the base image will be the one from the previous step
 	// Only set this if you don't want to reuse any part of the file system from the previous step
-	StartingImage string `json:"starting_image,omitempty"`
+	StartingImage string `json:"startingImage,omitempty"`
 }
 
 func NewStep(name string) *Step {

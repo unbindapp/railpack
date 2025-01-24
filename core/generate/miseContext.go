@@ -71,17 +71,14 @@ func (b *PackageStepBuilder) Build(options *BuildStepOptions) (*plan.Step, error
 
 	step.DependsOn = b.DependsOn
 
-	aptCache, ok := options.Caches["apt"]
-	if !ok {
-		aptCache = plan.NewCache("/var/cache/apt")
+	if _, ok := options.Caches["apt"]; !ok {
+		aptCache := plan.NewCache("/var/cache/apt")
 		aptCache.Type = plan.CacheTypeLocked
 		options.Caches["apt"] = aptCache
 	}
 
-	miseCache, ok := options.Caches["mise"]
-	if !ok {
-		miseCache = plan.NewCache("/mise/cache")
-		options.Caches["mise"] = miseCache
+	if _, ok := options.Caches["mise"]; !ok {
+		options.Caches["mise"] = plan.NewCache("/mise/cache")
 	}
 
 	// Install mise
