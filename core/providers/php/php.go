@@ -50,7 +50,6 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 			plan.NewExecCommand("composer install --ignore-platform-reqs"),
 		})
 
-		install.DependsOn = []string{}
 		install.DependsOn = []string{nginxPackages.DisplayName}
 	}
 

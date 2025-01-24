@@ -119,7 +119,34 @@ func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 
 	// Merge all leaf states
 	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(leafStepNames, ", "))
-	result := llb.Merge(leafStates, llb.WithCustomName(mergeName))
+
+	lowerState := leafStates[0]
+	diffStates := []llb.State{lowerState}
+
+	for i, s := range leafStates {
+		if i == 0 {
+			continue
+		}
+
+		diffStates = append(diffStates, llb.Diff(lowerState, s, llb.WithCustomNamef("diff(%s, %s)", leafStepNames[0], leafStepNames[i])))
+	}
+
+	result := llb.Merge(diffStates, llb.WithCustomName(mergeName))
+
+	// for i, state := range leafStates {
+	// 	diffStates[i] = llb.Diff(g.BaseState, state)
+	// }
+
+	// result = llb.Merge(diffStates, llb.WithCustomName(mergeName))
+
+	// result := llb.Scratch()
+	// for _, state := range leafStates {
+	// 	result = result.File(llb.Copy(state, "/", "/", &llb.CopyInfo{
+	// 		CreateDestPath: true,
+	// 		FollowSymlinks: true,
+	// 		AllowWildcard:  true,
+	// 	}))
+	// }
 
 	return &BuildGraphOutput{
 		State:    &result,
