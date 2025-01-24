@@ -10,6 +10,10 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const (
+	PRINT_GRAPH = false
+)
+
 var BuildCommand = &cli.Command{
 	Name:                  "build",
 	Aliases:               []string{"b"},
@@ -53,7 +57,9 @@ var BuildCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		log.Debug(string(serializedPlan))
+		if PRINT_GRAPH {
+			log.Debug(string(serializedPlan))
+		}
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
 			ImageName:    cmd.String("name"),
