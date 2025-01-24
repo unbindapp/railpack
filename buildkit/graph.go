@@ -58,6 +58,9 @@ func NewBuildGraph(plan *plan.BuildPlan, baseState *llb.State, cacheStore *Build
 		}
 	}
 
+	graph.computeTransitiveDependencies()
+	graph.PrintGraph()
+
 	return graph, nil
 }
 
@@ -184,6 +187,8 @@ func (g *BuildGraph) processNode(node *Node) error {
 		}
 
 		mergeName := fmt.Sprintf("merging steps: %s", strings.Join(mergeStepNames, ", "))
+		fmt.Println("mergeName", mergeName)
+
 		merged := llb.Merge(parentStates, llb.WithCustomName(mergeName))
 		currentState = &merged
 	}
@@ -251,7 +256,14 @@ func (g *BuildGraph) convertStepToLLB(node *Node, baseState *llb.State) (*llb.St
 			}))
 		}
 
-		merged := llb.Merge([]llb.State{*baseState, result})
+		// merged := llb.Merge([]llb.State{*baseState, result})
+
+		merged := baseState.File(llb.Copy(result, "/", "/", &llb.CopyInfo{
+			CreateDestPath: true,
+			FollowSymlinks: true,
+			AllowWildcard:  true,
+		}))
+
 		state = merged
 	}
 
@@ -310,7 +322,9 @@ func (g *BuildGraph) convertCommandToLLB(node *Node, cmd plan.Command, state llb
 			CreateDestPath:      true,
 			FollowSymlinks:      true,
 			CopyDirContentsOnly: false,
+			AllowWildcard:       false,
 		}))
+
 		return s, nil
 
 	case plan.FileCommand:
@@ -396,6 +410,58 @@ func (g *BuildGraph) getProcessingOrder() ([]*Node, error) {
 	}
 
 	return order, nil
+}
+
+func (g *BuildGraph) computeTransitiveDependencies() {
+	for _, node := range g.Nodes {
+		var newParents []*Node
+		for _, parent := range node.Parents {
+			isRedundant := false
+			for _, otherParent := range node.Parents {
+				if otherParent == parent {
+					continue
+				}
+
+				visited := make(map[string]bool)
+				var traverse func(*Node)
+				traverse = func(n *Node) {
+					if n == parent {
+						isRedundant = true
+						return
+					}
+					for _, p := range n.Parents {
+						if !visited[p.Step.Name] {
+							visited[p.Step.Name] = true
+							traverse(p)
+						}
+					}
+				}
+				traverse(otherParent)
+
+				if isRedundant {
+					break
+				}
+			}
+
+			if !isRedundant {
+				newParents = append(newParents, parent)
+			} else {
+				// Remove child relationship
+				parent.Children = removeNode(parent.Children, node)
+			}
+		}
+		node.Parents = newParents
+	}
+}
+
+func removeNode(nodes []*Node, target *Node) []*Node {
+	result := make([]*Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n != target {
+			result = append(result, n)
+		}
+	}
+	return result
 }
 
 func (g *BuildGraph) PrintGraph() {
