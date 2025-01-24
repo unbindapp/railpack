@@ -5,7 +5,6 @@ import (
 
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
-	"github.com/stretchr/objx"
 )
 
 const (
@@ -54,16 +53,6 @@ func (p *PythonProvider) start(ctx *generate.GenerateContext) error {
 		startCommand = "python main.py"
 	}
 
-	pyproject := map[string]interface{}{}
-	if err := ctx.App.ReadTOML("pyproject.toml", &pyproject); err == nil {
-		proj := objx.New(pyproject)
-
-		name := proj.Get("project.name")
-		if name.IsStr() {
-			startCommand = "python -m " + name.Str()
-		}
-	}
-
 	if startCommand != "" {
 		ctx.Start.Command = startCommand
 	}
@@ -102,7 +91,8 @@ func (p *PythonProvider) install(ctx *generate.GenerateContext) error {
 			plan.NewExecCommand("pipx install pdm"),
 			plan.NewCopyCommand("pyproject.toml"),
 			plan.NewCopyCommand("pdm.lock"),
-			plan.NewExecCommand("pdm install --prod"),
+			plan.NewExecCommand("pdm install --check --prod --no-editable"),
+			plan.NewPathCommand("/app/.venv/bin"),
 		})
 	} else if hasPyproject && hasUv {
 		install.AddCommands([]plan.Command{

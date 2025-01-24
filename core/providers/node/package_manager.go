@@ -140,6 +140,8 @@ func (p PackageManager) InstallPackages(ctx *generate.GenerateContext, packages 
 			packages.Version(npm, "6", "package-lock.json")
 		} else if strings.Contains(lockfile, "\"lockfileVersion\": 2") {
 			packages.Version(npm, "8", "package-lock.json")
+		} else if strings.Contains(lockfile, "\"lockfileVersion\": 3") {
+			packages.Version(npm, "9", "package-lock.json")
 		}
 	}
 

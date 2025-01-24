@@ -63,15 +63,11 @@ func (p *NodeProvider) start(ctx *generate.GenerateContext, packageJson *Package
 	packageManager := p.getPackageManager(ctx.App)
 
 	if start := p.getScripts(packageJson, "start"); start != "" {
-		ctx.Start.Command = packageManager.RunCmd(start)
+		ctx.Start.Command = packageManager.RunCmd("start")
 	} else if main := packageJson.Main; main != nil {
 		ctx.Start.Command = packageManager.RunScriptCommand(*main)
 	} else if files, err := ctx.App.FindFiles("{index.js,index.ts}"); err == nil && len(files) > 0 {
 		ctx.Start.Command = packageManager.RunScriptCommand(files[0])
-	}
-
-	if packageManager == PackageManagerNpm {
-		ctx.Start.Command = "npm run start"
 	}
 
 	ctx.Start.Paths = append(ctx.Start.Paths, ".")
@@ -105,7 +101,8 @@ func (p *NodeProvider) Install(ctx *generate.GenerateContext, packages *generate
 		corepackStep.AddCommands([]plan.Command{
 			plan.NewCopyCommand("package.json"),
 			plan.NewExecCommand("npm install -g corepack"),
-			plan.NewExecCommand("corepack enable && corepack prepare --activate"),
+			plan.NewExecCommand("corepack enable"),
+			plan.NewExecCommand("corepack prepare --activate"),
 		})
 		corepackStepName = corepackStep.DisplayName
 	}
