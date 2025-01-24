@@ -29,7 +29,7 @@ func (p *NodeProvider) Name() string {
 }
 
 func (p *NodeProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
-	packageJson, err := p.getPackageJson(ctx.App)
+	packageJson, err := p.GetPackageJson(ctx.App)
 	if err != nil {
 		return false, err
 	}
@@ -38,15 +38,17 @@ func (p *NodeProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, nil
 	}
 
-	if err := p.packages(ctx, packageJson); err != nil {
+	packages, err := p.Packages(ctx, packageJson)
+	if err != nil {
 		return false, err
 	}
 
-	if err := p.install(ctx, packageJson); err != nil {
+	install, err := p.Install(ctx, packages, packageJson)
+	if err != nil {
 		return false, err
 	}
 
-	if err := p.build(ctx, packageJson); err != nil {
+	if _, err := p.Build(ctx, install, packageJson); err != nil {
 		return false, err
 	}
 
@@ -77,7 +79,7 @@ func (p *NodeProvider) start(ctx *generate.GenerateContext, packageJson *Package
 	return nil
 }
 
-func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *PackageJson) error {
+func (p *NodeProvider) Build(ctx *generate.GenerateContext, install *generate.CommandStepBuilder, packageJson *PackageJson) (*generate.CommandStepBuilder, error) {
 	packageManager := p.getPackageManager(ctx.App)
 	_, ok := packageJson.Scripts["build"]
 	if ok {
@@ -88,39 +90,40 @@ func (p *NodeProvider) build(ctx *generate.GenerateContext, packageJson *Package
 			plan.NewExecCommand(packageManager.RunCmd("build")),
 		})
 
-		build.DependOn("install")
+		build.DependsOn = []string{install.DisplayName}
+
+		return build, nil
 	}
 
-	return nil
-
+	return nil, nil
 }
 
-func (p *NodeProvider) install(ctx *generate.GenerateContext, packageJson *PackageJson) error {
-	corepack := p.usesCorepack(packageJson)
-	if corepack {
-		setup := ctx.NewCommandStep("corepack")
-		setup.AddCommands([]plan.Command{
+func (p *NodeProvider) Install(ctx *generate.GenerateContext, packages *generate.PackageStepBuilder, packageJson *PackageJson) (*generate.CommandStepBuilder, error) {
+	var corepackStepName string
+	if p.usesCorepack(packageJson) {
+		corepackStep := ctx.NewCommandStep("corepack")
+		corepackStep.AddCommands([]plan.Command{
 			plan.NewCopyCommand("package.json"),
-			plan.NewExecCommand("ls -la"),
 			plan.NewExecCommand("npm install -g corepack"),
-			plan.NewExecCommand("corepack enable"),
-			plan.NewExecCommand("corepack prepare --activate"),
+			plan.NewExecCommand("corepack enable && corepack prepare --activate"),
 		})
+		corepackStepName = corepackStep.DisplayName
 	}
 
 	pkgManager := p.getPackageManager(ctx.App)
 
 	install := ctx.NewCommandStep("install")
+	install.DependsOn = []string{packages.DisplayName}
 	pkgManager.installDependencies(ctx, packageJson, install)
 
-	if corepack {
-		install.DependsOn = []string{"corepack"}
+	if corepackStepName != "" {
+		install.DependsOn = []string{corepackStepName}
 	}
 
-	return nil
+	return install, nil
 }
 
-func (p *NodeProvider) packages(ctx *generate.GenerateContext, packageJson *PackageJson) error {
+func (p *NodeProvider) Packages(ctx *generate.GenerateContext, packageJson *PackageJson) (*generate.PackageStepBuilder, error) {
 	packageManager := p.getPackageManager(ctx.App)
 
 	packages := ctx.NewPackageStep("packages")
@@ -148,7 +151,7 @@ func (p *NodeProvider) packages(ctx *generate.GenerateContext, packageJson *Pack
 
 	packageManager.InstallPackages(ctx, packages)
 
-	return nil
+	return packages, nil
 }
 
 func (p *NodeProvider) usesCorepack(packageJson *PackageJson) bool {
@@ -171,7 +174,7 @@ func (p *NodeProvider) getPackageManager(app *app.App) PackageManager {
 	return packageManager
 }
 
-func (p *NodeProvider) getPackageJson(app *app.App) (*PackageJson, error) {
+func (p *NodeProvider) GetPackageJson(app *app.App) (*PackageJson, error) {
 	if !app.HasMatch("package.json") {
 		return nil, nil
 	}

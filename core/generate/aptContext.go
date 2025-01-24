@@ -18,7 +18,7 @@ type AptStepBuilder struct {
 
 func (c *GenerateContext) NewAptStep(name string) *AptStepBuilder {
 	step := &AptStepBuilder{
-		DisplayName: name,
+		DisplayName: c.GetStepName(name),
 		DependsOn:   []string{},
 		Packages:    []string{},
 	}

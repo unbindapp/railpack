@@ -12,7 +12,7 @@ type CommandStepBuilder struct {
 
 func (c *GenerateContext) NewCommandStep(name string) *CommandStepBuilder {
 	step := &CommandStepBuilder{
-		DisplayName: name,
+		DisplayName: c.GetStepName(name),
 		DependsOn:   []string{PackagesStepName},
 		Commands:    []plan.Command{},
 		Outputs:     []string{},

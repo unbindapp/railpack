@@ -1,6 +1,8 @@
 package generate
 
 import (
+	"strings"
+
 	a "github.com/railwayapp/railpack-go/core/app"
 	"github.com/railwayapp/railpack-go/core/mise"
 	"github.com/railwayapp/railpack-go/core/plan"
@@ -17,14 +19,14 @@ type StepBuilder interface {
 }
 
 type GenerateContext struct {
-	App       *a.App
-	Env       *a.Environment
-	Variables map[string]string
-	Steps     []StepBuilder
-	Start     StartContext
-	Caches    map[string]*plan.Cache
-
-	resolver *resolver.Resolver
+	App         *a.App
+	Env         *a.Environment
+	Variables   map[string]string
+	Steps       []StepBuilder
+	Start       StartContext
+	Caches      map[string]*plan.Cache
+	resolver    *resolver.Resolver
+	SubContexts []string
 }
 
 func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error) {
@@ -42,6 +44,24 @@ func NewGenerateContext(app *a.App, env *a.Environment) (*GenerateContext, error
 		Caches:    make(map[string]*plan.Cache),
 		resolver:  resolver,
 	}, nil
+}
+
+func (c *GenerateContext) EnterSubContext(subContext string) *GenerateContext {
+	c.SubContexts = append(c.SubContexts, subContext)
+	return c
+}
+
+func (c *GenerateContext) ExitSubContext() *GenerateContext {
+	c.SubContexts = c.SubContexts[:len(c.SubContexts)-1]
+	return c
+}
+
+func (c *GenerateContext) GetStepName(name string) string {
+	subContextNames := strings.Join(c.SubContexts, ":")
+	if subContextNames != "" {
+		return name + ":" + subContextNames
+	}
+	return name
 }
 
 func (c *GenerateContext) ResolvePackages() (map[string]*resolver.ResolvedPackage, error) {

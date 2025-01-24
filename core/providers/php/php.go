@@ -3,10 +3,12 @@ package php
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/railwayapp/railpack-go/core/generate"
 	"github.com/railwayapp/railpack-go/core/plan"
+	"github.com/railwayapp/railpack-go/core/providers/node"
 	"github.com/stretchr/objx"
 )
 
@@ -28,14 +30,15 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		return false, nil
 	}
 
-	if err := p.packages(ctx); err != nil {
+	imageStep, err := p.phpImagePackage(ctx)
+	if err != nil {
 		return false, err
 	}
 
 	// Install nginx
 	nginxPackages := ctx.NewAptStep("packages:nginx")
 	nginxPackages.Packages = []string{"nginx", "git", "zip", "unzip"}
-	nginxPackages.DependsOn = []string{"packages"}
+	nginxPackages.DependsOn = []string{imageStep.DisplayName}
 
 	// Install composer
 	if _, err := p.readComposerJson(ctx); err == nil {
@@ -47,7 +50,34 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 			plan.NewExecCommand("composer install --ignore-platform-reqs"),
 		})
 
-		install.DependsOn = []string{"packages"}
+		install.DependsOn = []string{nginxPackages.DisplayName}
+	}
+
+	// Install node
+	nodeProvider := node.NodeProvider{}
+	if packageJson, err := nodeProvider.GetPackageJson(ctx.App); err == nil && packageJson != nil {
+		ctx.EnterSubContext("node")
+
+		nodePackages, err := nodeProvider.Packages(ctx, packageJson)
+		if err != nil {
+			return false, err
+		}
+		nodePackages.DependsOn = []string{nginxPackages.DisplayName}
+
+		nodeInstall, err := nodeProvider.Install(ctx, nodePackages, packageJson)
+		if err != nil {
+			return false, err
+		}
+
+		nodeBuild, err := nodeProvider.Build(ctx, nodeInstall, packageJson)
+		if err != nil {
+			return false, err
+		}
+
+		// depend on the composer install step
+		nodeBuild.DependsOn = append(nodeBuild.DependsOn, "install")
+
+		ctx.ExitSubContext()
 	}
 
 	// Setup nginx
@@ -55,8 +85,8 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 	nginxSetup.DependsOn = []string{"packages:nginx"}
 
 	nginxSetup.AddCommands([]plan.Command{
-		plan.NewFileCommand("/etc/nginx/nginx.conf", "nginx.conf", plan.FileOptions{CustomName: "create nginx config"}),
-		plan.NewExecCommand("nginx -t -c /etc/nginx/nginx.conf"),
+		plan.NewFileCommand("/etc/nginx/railpack.conf", "nginx.conf", plan.FileOptions{CustomName: "create nginx config"}),
+		plan.NewExecCommand("nginx -t -c /etc/nginx/railpack.conf"),
 
 		plan.NewFileCommand("/etc/php-fpm.conf", "php-fpm.conf", plan.FileOptions{CustomName: "create php-fpm config"}),
 
@@ -66,17 +96,30 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		}),
 	})
 
-	nginxSetup.Assets["start-nginx.sh"] = startNginxScriptAsset
-	if configFiles, err := getConfigFiles(ctx); err == nil {
+	// if p.usesLaravel(ctx) {
+	// 	nginxSetup.AddCommands([]plan.Command{
+	// 		plan.NewVariableCommand("IS_LARAVEL", "true"),
+	// 	})
+	// }
 
-		nginxSetup.Assets["nginx.conf"] = configFiles.NginxConf
-		nginxSetup.Assets["php-fpm.conf"] = configFiles.PhpFpmConf
+	nginxSetup.Assets["start-nginx.sh"] = startNginxScriptAsset
+	configFiles, err := p.getConfigFiles(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get config files: %w", err)
 	}
+
+	nginxSetup.Assets["nginx.conf"] = configFiles.NginxConf
+	nginxSetup.Assets["nginx.conf"] = configFiles.NginxConf
+	nginxSetup.Assets["php-fpm.conf"] = configFiles.PhpFpmConf
 
 	ctx.Start.Command = "bash /start-nginx.sh"
 	ctx.Start.Paths = []string{"."}
 
-	return false, nil
+	return true, nil
+}
+
+func (p *PhpProvider) usesLaravel(ctx *generate.GenerateContext) bool {
+	return ctx.App.HasMatch("artisan")
 }
 
 type ConfigFiles struct {
@@ -84,10 +127,17 @@ type ConfigFiles struct {
 	PhpFpmConf string
 }
 
-func getConfigFiles(ctx *generate.GenerateContext) (*ConfigFiles, error) {
+func (p *PhpProvider) getConfigFiles(ctx *generate.GenerateContext) (*ConfigFiles, error) {
+	phpRootDir := "/app"
+	if variable := ctx.Env.GetVariable("RAILPACK_PHP_ROOT_DIR"); variable != "" {
+		phpRootDir = variable
+	} else if p.usesLaravel(ctx) {
+		phpRootDir = "/app/public"
+	}
+
 	data := map[string]interface{}{
-		"NIXPACKS_PHP_ROOT_DIR": "/app",
-		"IS_LARAVEL":            false,
+		"RAILPACK_PHP_ROOT_DIR": phpRootDir,
+		"IS_LARAVEL":            p.usesLaravel(ctx),
 	}
 
 	nginxConf, err := readFileOrTemplateWithDefault(ctx, "nginx.conf", "nginx.template.conf", nginxConfTemplateAsset, data)
@@ -106,7 +156,7 @@ func getConfigFiles(ctx *generate.GenerateContext) (*ConfigFiles, error) {
 	}, nil
 }
 
-func (p *PhpProvider) packages(ctx *generate.GenerateContext) error {
+func (p *PhpProvider) phpImagePackage(ctx *generate.GenerateContext) (*generate.ImageStepBuilder, error) {
 	imageStep := ctx.NewImageStep("packages", func(options *generate.BuildStepOptions) string {
 		if phpVersion, ok := options.ResolvedPackages["php"]; ok && phpVersion.ResolvedVersion != nil {
 			return getPhpImage(*phpVersion.ResolvedVersion)
@@ -122,11 +172,15 @@ func (p *PhpProvider) packages(ctx *generate.GenerateContext) error {
 	if composerJson, err := p.readComposerJson(ctx); err == nil {
 		phpVersion := objx.New(composerJson).Get("require.php")
 		if phpVersion.IsStr() {
-			imageStep.Version(php, phpVersion.Str(), "composer.json > require > php")
+			if strings.HasPrefix(phpVersion.Str(), "^") {
+				imageStep.Version(php, strings.TrimPrefix(phpVersion.Str(), "^"), "composer.json > require > php")
+			} else {
+				imageStep.Version(php, phpVersion.Str(), "composer.json > require > php")
+			}
 		}
 	}
 
-	return nil
+	return imageStep, nil
 }
 
 // readFileOrTemplateWithDefault reads a file or template from the app, or fallsback to a static default

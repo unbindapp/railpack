@@ -64,7 +64,7 @@ func TestNodeCorepack(t *testing.T) {
 			ctx := testingUtils.CreateGenerateContext(t, tt.path)
 			provider := NodeProvider{}
 
-			packageJson, err := provider.getPackageJson(ctx.App)
+			packageJson, err := provider.GetPackageJson(ctx.App)
 			require.NoError(t, err)
 
 			usesCorepack := provider.usesCorepack(packageJson)

@@ -30,7 +30,7 @@ type PackageStepBuilder struct {
 
 func (c *GenerateContext) NewPackageStep(name string) *PackageStepBuilder {
 	step := &PackageStepBuilder{
-		DisplayName:           name,
+		DisplayName:           c.GetStepName(name),
 		Resolver:              c.resolver,
 		MisePackages:          []*resolver.PackageRef{},
 		SupportingAptPackages: []string{},

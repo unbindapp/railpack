@@ -14,8 +14,8 @@ type Provider interface {
 
 func GetLanguageProviders() []Provider {
 	return []Provider{
+		&php.PhpProvider{},
 		&node.NodeProvider{},
 		&python.PythonProvider{},
-		&php.PhpProvider{},
 	}
 }

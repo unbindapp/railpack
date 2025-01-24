@@ -108,7 +108,7 @@ func FormatBuildResult(br *BuildResult) string {
 
 		stepCount := 0
 		for _, step := range br.Plan.Steps {
-			if step.Name != "packages" && step.Commands != nil { // Skip the packages step
+			if !strings.HasPrefix(step.Name, "packages") && step.Commands != nil { // Skip the packages step
 				hasExecCommands := false
 				var execCommands []string
 
