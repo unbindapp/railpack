@@ -87,10 +87,14 @@ func (p *PythonProvider) install(ctx *generate.GenerateContext) error {
 			plan.NewExecCommand("poetry install --no-interaction --no-ansi --no-root"),
 		})
 	} else if hasPyproject && hasPdm {
+		// TODO: Fix this. PDM is not working because the packages are installed into a venv
+		// that is not available to python at runtime
 		install.AddCommands([]plan.Command{
 			plan.NewExecCommand("pipx install pdm"),
+			plan.NewVariableCommand("PDM_CHECK_UPDATE", "false"),
 			plan.NewCopyCommand("pyproject.toml"),
 			plan.NewCopyCommand("pdm.lock"),
+			plan.NewCopyCommand("."),
 			plan.NewExecCommand("pdm install --check --prod --no-editable"),
 			plan.NewPathCommand("/app/.venv/bin"),
 		})
