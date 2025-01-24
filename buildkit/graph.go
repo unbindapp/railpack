@@ -124,34 +124,45 @@ func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 }
 
 func (g *BuildGraph) mergeNodes(nodes []*Node) llb.State {
-	stateNames := make([]string, 0)
+	stateNames := []string{}
 	for _, node := range nodes {
 		stateNames = append(stateNames, node.Step.Name)
 	}
 
 	fmt.Println("stateNames", stateNames)
 
-	states := make([]llb.State, 0)
+	states := []llb.State{}
 	for _, node := range nodes {
 		states = append(states, *node.State)
 	}
 
-	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(stateNames, ", "))
-
-	lowerState := states[0]
-	diffStates := []llb.State{lowerState}
-
-	for i, s := range states {
-		if i == 0 {
-			continue
-		}
-
-		diffStates = append(diffStates, llb.Diff(lowerState, s, llb.WithCustomNamef("diff(%s, %s)", stateNames[0], stateNames[i])))
+	result := llb.Scratch()
+	for i, state := range states {
+		result = result.File(llb.Copy(state, "/", "/", &llb.CopyInfo{
+			CreateDestPath: true,
+			FollowSymlinks: true,
+			AllowWildcard:  true,
+		}), llb.WithCustomNamef("copy from %s", stateNames[i]))
 	}
 
-	result := llb.Merge(diffStates, llb.WithCustomName(mergeName))
-
 	return result
+
+	// mergeName := fmt.Sprintf("merging steps: %s", strings.Join(stateNames, ", "))
+
+	// lowerState := states[0]
+	// diffStates := []llb.State{lowerState}
+
+	// for i, s := range states {
+	// 	if i == 0 {
+	// 		continue
+	// 	}
+
+	// 	diffStates = append(diffStates, llb.Diff(lowerState, s, llb.WithCustomNamef("diff(%s, %s)", stateNames[0], stateNames[i])))
+	// }
+
+	// result := llb.Merge(diffStates, llb.WithCustomName(mergeName))
+
+	// return result
 }
 
 func (g *BuildGraph) processNode(node *Node) error {

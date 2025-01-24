@@ -3,8 +3,8 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
+	"github.com/charmbracelet/log"
 	"github.com/railwayapp/railpack-go/buildkit"
 	"github.com/railwayapp/railpack-go/core"
 	"github.com/urfave/cli/v3"
@@ -53,7 +53,7 @@ var BuildCommand = &cli.Command{
 			return cli.Exit(err, 1)
 		}
 
-		fmt.Println(string(serializedPlan))
+		log.Debug(string(serializedPlan))
 
 		err = buildkit.BuildWithBuildkitClient(app.Source, buildResult.Plan, buildkit.BuildWithBuildkitClientOptions{
 			ImageName:    cmd.String("name"),

@@ -69,13 +69,11 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		nodeInstall.Outputs = []string{"/app"}
 
-		nodeBuild, err := nodeProvider.Build(ctx, nodeInstall, packageJson)
+		_, err = nodeProvider.Build(ctx, nodeInstall, packageJson)
 		if err != nil {
 			return false, err
 		}
-		nodeBuild.Outputs = []string{"/app"}
 
 		ctx.ExitSubContext()
 	}
@@ -87,9 +85,7 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 	nginxSetup.AddCommands([]plan.Command{
 		plan.NewFileCommand("/etc/nginx/railpack.conf", "nginx.conf", plan.FileOptions{CustomName: "create nginx config"}),
 		plan.NewExecCommand("nginx -t -c /etc/nginx/railpack.conf"),
-
 		plan.NewFileCommand("/etc/php-fpm.conf", "php-fpm.conf", plan.FileOptions{CustomName: "create php-fpm config"}),
-
 		plan.NewFileCommand("/start-nginx.sh", "start-nginx.sh", plan.FileOptions{
 			CustomName: "create start nginx script",
 			Mode:       0755,
