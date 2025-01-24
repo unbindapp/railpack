@@ -50,6 +50,7 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 			plan.NewExecCommand("composer install --ignore-platform-reqs"),
 		})
 
+		install.DependsOn = []string{}
 		install.DependsOn = []string{nginxPackages.DisplayName}
 	}
 
@@ -62,27 +63,24 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		nodePackages.DependsOn = []string{nginxPackages.DisplayName}
+		nodePackages.DependsOn = []string{imageStep.DisplayName}
 
 		nodeInstall, err := nodeProvider.Install(ctx, nodePackages, packageJson)
 		if err != nil {
 			return false, err
 		}
 
-		nodeBuild, err := nodeProvider.Build(ctx, nodeInstall, packageJson)
+		_, err = nodeProvider.Build(ctx, nodeInstall, packageJson)
 		if err != nil {
 			return false, err
 		}
-
-		// depend on the composer install step
-		nodeBuild.DependsOn = append(nodeBuild.DependsOn, "install")
 
 		ctx.ExitSubContext()
 	}
 
 	// Setup nginx
 	nginxSetup := ctx.NewCommandStep("nginx:setup")
-	nginxSetup.DependsOn = []string{"packages:nginx"}
+	nginxSetup.DependsOn = []string{nginxPackages.DisplayName}
 
 	nginxSetup.AddCommands([]plan.Command{
 		plan.NewFileCommand("/etc/nginx/railpack.conf", "nginx.conf", plan.FileOptions{CustomName: "create nginx config"}),
@@ -96,11 +94,11 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		}),
 	})
 
-	// if p.usesLaravel(ctx) {
-	// 	nginxSetup.AddCommands([]plan.Command{
-	// 		plan.NewVariableCommand("IS_LARAVEL", "true"),
-	// 	})
-	// }
+	if p.usesLaravel(ctx) {
+		nginxSetup.AddCommands([]plan.Command{
+			plan.NewVariableCommand("IS_LARAVEL", "true"),
+		})
+	}
 
 	nginxSetup.Assets["start-nginx.sh"] = startNginxScriptAsset
 	configFiles, err := p.getConfigFiles(ctx)
