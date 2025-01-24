@@ -79,16 +79,14 @@ func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 	}
 
 	// Find all leaf nodes and get their states
-	var leafStates []llb.State
-	var leafStepNames []string
+	var leafNodes []*Node
 
 	outputPathList := make([]string, 0)
 	outputEnvVars := make(map[string]string)
 
 	for _, node := range g.Nodes {
 		if len(node.Children) == 0 && node.State != nil {
-			leafStates = append(leafStates, *node.State)
-			leafStepNames = append(leafStepNames, node.Step.Name)
+			leafNodes = append(leafNodes, node)
 
 			// Add output path and env vars
 			outputPathList = append(outputPathList, node.OutputPathList...)
@@ -96,11 +94,10 @@ func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 				outputEnvVars[k] = v
 			}
 		}
-
 	}
 
 	// If no leaf states, return base state
-	if len(leafStates) == 0 {
+	if len(leafNodes) == 0 {
 		return &BuildGraphOutput{
 			State:    g.BaseState,
 			PathList: outputPathList,
@@ -109,50 +106,52 @@ func (g *BuildGraph) GenerateLLB() (*BuildGraphOutput, error) {
 	}
 
 	// If only one leaf state, return it
-	if len(leafStates) == 1 {
+	if len(leafNodes) == 1 {
 		return &BuildGraphOutput{
-			State:    &leafStates[0],
+			State:    leafNodes[0].State,
 			PathList: outputPathList,
 			EnvVars:  outputEnvVars,
 		}, nil
 	}
 
-	// Merge all leaf states
-	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(leafStepNames, ", "))
-
-	lowerState := leafStates[0]
-	diffStates := []llb.State{lowerState}
-
-	for i, s := range leafStates {
-		if i == 0 {
-			continue
-		}
-
-		diffStates = append(diffStates, llb.Diff(lowerState, s, llb.WithCustomNamef("diff(%s, %s)", leafStepNames[0], leafStepNames[i])))
-	}
-
-	result := llb.Merge(diffStates, llb.WithCustomName(mergeName))
-
-	// for i, state := range leafStates {
-	// 	diffStates[i] = llb.Diff(g.BaseState, state)
-	// }
-
-	// result = llb.Merge(diffStates, llb.WithCustomName(mergeName))
-
-	// result := llb.Scratch()
-	// for _, state := range leafStates {
-	// 	result = result.File(llb.Copy(state, "/", "/", &llb.CopyInfo{
-	// 		CreateDestPath: true,
-	// 		FollowSymlinks: true,
-	// 		AllowWildcard:  true,
-	// 	}))
-	// }
+	result := g.mergeNodes(leafNodes)
 
 	return &BuildGraphOutput{
 		State:    &result,
 		PathList: outputPathList,
 		EnvVars:  outputEnvVars,
 	}, nil
+}
+
+func (g *BuildGraph) mergeNodes(nodes []*Node) llb.State {
+	stateNames := make([]string, 0)
+	for _, node := range nodes {
+		stateNames = append(stateNames, node.Step.Name)
+	}
+
+	fmt.Println("stateNames", stateNames)
+
+	states := make([]llb.State, 0)
+	for _, node := range nodes {
+		states = append(states, *node.State)
+	}
+
+	mergeName := fmt.Sprintf("merging steps: %s", strings.Join(stateNames, ", "))
+
+	lowerState := states[0]
+	diffStates := []llb.State{lowerState}
+
+	for i, s := range states {
+		if i == 0 {
+			continue
+		}
+
+		diffStates = append(diffStates, llb.Diff(lowerState, s, llb.WithCustomNamef("diff(%s, %s)", stateNames[0], stateNames[i])))
+	}
+
+	result := llb.Merge(diffStates, llb.WithCustomName(mergeName))
+
+	return result
 }
 
 func (g *BuildGraph) processNode(node *Node) error {
@@ -216,7 +215,10 @@ func (g *BuildGraph) processNode(node *Node) error {
 		mergeName := fmt.Sprintf("merging steps: %s", strings.Join(mergeStepNames, ", "))
 		fmt.Println("mergeName", mergeName)
 
-		merged := llb.Merge(parentStates, llb.WithCustomName(mergeName))
+		// merged := llb.Merge(parentStates, llb.WithCustomName(mergeName))
+
+		merged := g.mergeNodes(node.Parents)
+
 		currentState = &merged
 	}
 

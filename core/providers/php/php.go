@@ -50,6 +50,7 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 			plan.NewExecCommand("composer install --ignore-platform-reqs"),
 		})
 
+		install.DependsOn = []string{}
 		install.DependsOn = []string{nginxPackages.DisplayName}
 	}
 
@@ -68,11 +69,13 @@ func (p *PhpProvider) Plan(ctx *generate.GenerateContext) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+		nodeInstall.Outputs = []string{"/app"}
 
-		_, err = nodeProvider.Build(ctx, nodeInstall, packageJson)
+		nodeBuild, err := nodeProvider.Build(ctx, nodeInstall, packageJson)
 		if err != nil {
 			return false, err
 		}
+		nodeBuild.Outputs = []string{"/app"}
 
 		ctx.ExitSubContext()
 	}
