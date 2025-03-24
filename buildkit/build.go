@@ -19,8 +19,8 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 	"github.com/moby/buildkit/util/progress/progressui"
-	"github.com/unbindapp/railpack/core/plan"
 	"github.com/tonistiigi/fsutil"
+	"github.com/unbindapp/railpack/core/plan"
 )
 
 type BuildWithBuildkitClientOptions struct {
@@ -257,6 +257,21 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 			exportAttrs["push"] = "true"
 		}
 
+		// Add compression settings if specified
+		if opts.RegistryOptions.CompressionType != "" {
+			exportAttrs["compression"] = opts.RegistryOptions.CompressionType
+		} else {
+			// Default to estargz compression for better performance
+			exportAttrs["compression"] = "estargz"
+		}
+
+		if opts.RegistryOptions.CompressionLevel != "" {
+			exportAttrs["compression-level"] = opts.RegistryOptions.CompressionLevel
+		} else {
+			// Default to level 3 for balance between speed and size
+			exportAttrs["compression-level"] = "3"
+		}
+
 		solveOpts = client.SolveOpt{
 			LocalMounts: map[string]fsutil.FS{
 				"context": appFS,
@@ -286,7 +301,7 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	}
 
 	// Only wait for docker load if we used it
-	if opts.OutputDir == "" {
+	if opts.OutputDir == "" && !opts.RegistryOptions.UseRegistryExport {
 		if err := <-errCh; err != nil {
 			return fmt.Errorf("docker load failed: %w", err)
 		}

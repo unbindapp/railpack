@@ -13,6 +13,8 @@ type RegistryOptions struct {
 	RegistryUser      string
 	RegistryPassword  string
 	RegistryPush      bool
+	CompressionType   string
+	CompressionLevel  string
 }
 
 func createAuthProvider(registryURL, username, password string) session.Attachable {
