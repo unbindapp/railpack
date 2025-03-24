@@ -24,16 +24,17 @@ import (
 )
 
 type BuildWithBuildkitClientOptions struct {
-	ImageName    string
-	DumpLLB      bool
-	OutputDir    string
-	ProgressMode string
-	SecretsHash  string
-	Secrets      map[string]string
-	Platform     BuildPlatform
-	ImportCache  string
-	ExportCache  string
-	CacheKey     string
+	ImageName       string
+	DumpLLB         bool
+	OutputDir       string
+	ProgressMode    string
+	SecretsHash     string
+	Secrets         map[string]string
+	Platform        BuildPlatform
+	ImportCache     string
+	ExportCache     string
+	CacheKey        string
+	RegistryOptions RegistryOptions
 }
 
 func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWithBuildkitClientOptions) error {
@@ -48,6 +49,24 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	if buildkitHost == "" {
 		log.Error("BUILDKIT_HOST environment variable is not set")
 		return fmt.Errorf("BUILDKIT_HOST environment variable is not set")
+	}
+
+	// Prepend registry URL to image name if configured
+	if opts.RegistryOptions.UseRegistryExport && opts.RegistryOptions.RegistryURL != "" {
+		// Only prepend registry URL if the image name doesn't already have registry information
+		// and if it doesn't contain a port number or domain suffix (like '.com')
+		if !strings.Contains(imageName, "/") ||
+			(!strings.Contains(imageName, ":") && !strings.Contains(strings.Split(imageName, "/")[0], ".")) {
+
+			// Clean registry URL (remove http/https prefix if present)
+			registryURL := opts.RegistryOptions.RegistryURL
+			registryURL = strings.TrimPrefix(registryURL, "http://")
+			registryURL = strings.TrimPrefix(registryURL, "https://")
+			registryURL = strings.TrimRight(registryURL, "/")
+
+			// Prepend the registry URL to the image name
+			imageName = fmt.Sprintf("%s/%s", registryURL, imageName)
+		}
 	}
 
 	log.Debugf("Connecting to buildkit host: %s", buildkitHost)
@@ -104,7 +123,7 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	errCh := make(chan error, 1)
 
 	// Only set up pipe and docker load if we're not saving to a directory
-	if opts.OutputDir == "" {
+	if opts.OutputDir == "" && !opts.RegistryOptions.UseRegistryExport {
 		// Create a pipe to connect buildkit output to docker load
 		pipeR, pipeW = io.Pipe()
 		defer pipeR.Close()
@@ -161,6 +180,16 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	}
 	secrets := secretsprovider.FromMap(secretsMap)
 
+	// Setting up session attachments for registry auth if needed
+	sessionAttachables := []session.Attachable{secrets}
+
+	// Registry authentication setup for session if using registry export
+	if opts.RegistryOptions.UseRegistryExport && opts.RegistryOptions.RegistryUser != "" && opts.RegistryOptions.RegistryPassword != "" {
+		// Create registry authentication with our custom function
+		authProvider := createAuthProvider(opts.RegistryOptions.RegistryURL, opts.RegistryOptions.RegistryUser, opts.RegistryOptions.RegistryPassword)
+		sessionAttachables = append(sessionAttachables, authProvider)
+	}
+
 	solveOpts := client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			"context": appFS,
@@ -211,6 +240,32 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 				{
 					Type:      client.ExporterLocal,
 					OutputDir: opts.OutputDir,
+				},
+			},
+		}
+	}
+
+	// Export to registry
+	if opts.RegistryOptions.UseRegistryExport {
+		// Registry export configuration
+		exportAttrs := map[string]string{
+			"name": imageName,
+		}
+
+		// Add push option if specified
+		if opts.RegistryOptions.RegistryPush {
+			exportAttrs["push"] = "true"
+		}
+
+		solveOpts = client.SolveOpt{
+			LocalMounts: map[string]fsutil.FS{
+				"context": appFS,
+			},
+			Session: sessionAttachables,
+			Exports: []client.ExportEntry{
+				{
+					Type:  client.ExporterImage,
+					Attrs: exportAttrs,
 				},
 			},
 		}
