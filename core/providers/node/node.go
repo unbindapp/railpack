@@ -6,9 +6,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/railwayapp/railpack/core/app"
-	"github.com/railwayapp/railpack/core/generate"
-	"github.com/railwayapp/railpack/core/plan"
+	"github.com/unbindapp/railpack/core/app"
+	"github.com/unbindapp/railpack/core/generate"
+	"github.com/unbindapp/railpack/core/plan"
 )
 
 type PackageManager string

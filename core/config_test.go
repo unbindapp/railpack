@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/railwayapp/railpack/core/app"
-	"github.com/railwayapp/railpack/core/config"
+	"github.com/unbindapp/railpack/core/app"
+	"github.com/unbindapp/railpack/core/config"
 	"github.com/stretchr/testify/require"
 )
 

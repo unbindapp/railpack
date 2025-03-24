@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	testingUtils "github.com/railwayapp/railpack/core/testing"
+	testingUtils "github.com/unbindapp/railpack/core/testing"
 )
 
 func TestDetect(t *testing.T) {

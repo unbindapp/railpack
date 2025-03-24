@@ -1,6 +1,6 @@
 package generate
 
-import "github.com/railwayapp/railpack/core/plan"
+import "github.com/unbindapp/railpack/core/plan"
 
 type DeployBuilder struct {
 	Inputs      []plan.Input

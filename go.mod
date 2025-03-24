@@ -1,4 +1,4 @@
-module github.com/railwayapp/railpack
+module github.com/unbindapp/railpack
 
 go 1.23.3
 

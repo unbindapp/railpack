@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/railwayapp/railpack/core/config"
+	"github.com/unbindapp/railpack/core/config"
 	"github.com/urfave/cli/v3"
 )
 
