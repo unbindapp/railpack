@@ -249,7 +249,8 @@ func BuildWithBuildkitClient(appDir string, plan *plan.BuildPlan, opts BuildWith
 	if opts.RegistryOptions.UseRegistryExport {
 		// Registry export configuration
 		exportAttrs := map[string]string{
-			"name": imageName,
+			"name":                  imageName,
+			"containerimage.config": string(imageBytes),
 		}
 
 		// Add push option if specified
